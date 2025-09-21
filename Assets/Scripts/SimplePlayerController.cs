@@ -14,6 +14,7 @@ public class SimplePlayerController : NetworkBehaviour
     public NetworkVariable<int> CurrentHealth = new NetworkVariable<int>(0, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
     [Header("Combat Settings")]
+    [SerializeField] private bool friendlyFireEnabled = false;
     [SerializeField] private GameObject projectilePrefab;
     [SerializeField] private Transform firePoint;
     [SerializeField] private float fireRate = 4f;
@@ -73,9 +74,18 @@ public class SimplePlayerController : NetworkBehaviour
         Ray ray = mainCamera.ScreenPointToRay(Input.mousePosition);
         if (Physics.Raycast(ray, out RaycastHit hit, shootingRange))
         {
+            // Apuntamos a enemigos O a jugadores si el friendly fire está activo
             if (hit.collider.CompareTag("Enemy"))
             {
                 mouseTarget = hit.transform;
+            }
+            else if (friendlyFireEnabled && hit.collider.CompareTag("Player"))
+            {
+                // Nos aseguramos de no apuntarnos a nosotros mismos
+                if (hit.collider.gameObject != this.gameObject)
+                {
+                    mouseTarget = hit.transform;
+                }
             }
         }
 
@@ -85,13 +95,12 @@ public class SimplePlayerController : NetworkBehaviour
         }
         else
         {
-            currentTarget = FindNearestEnemy();
+            currentTarget = FindNearestTarget(); // La función ahora buscará ambos tipos
         }
 
         if (Input.GetKey(KeyCode.Mouse0) && Time.time >= nextFireTime)
         {
             nextFireTime = Time.time + 1f / fireRate;
-
             if (currentTarget != null)
             {
                 Vector3 direction = (currentTarget.position - firePoint.position).normalized;
@@ -100,12 +109,28 @@ public class SimplePlayerController : NetworkBehaviour
         }
     }
 
-    private Transform FindNearestEnemy()
+
+    private Transform FindNearestTarget()
     {
-        return Physics.OverlapSphere(transform.position, shootingRange)
+        var enemies = Physics.OverlapSphere(transform.position, shootingRange)
             .Where(col => col.CompareTag("Enemy"))
-            .OrderBy(col => Vector3.Distance(transform.position, col.transform.position))
-            .Select(col => col.transform)
+            .Select(col => col.transform);
+
+        if (friendlyFireEnabled)
+        {
+            var players = Physics.OverlapSphere(transform.position, shootingRange)
+                .Where(col => col.CompareTag("Player") && col.gameObject != this.gameObject) // Excluimos a nuestro propio jugador
+                .Select(col => col.transform);
+
+            // Combinamos ambas listas y ordenamos por distancia
+            return enemies.Concat(players)
+                .OrderBy(t => Vector3.Distance(transform.position, t.position))
+                .FirstOrDefault();
+        }
+
+        // Si no hay friendly fire, solo buscamos enemigos
+        return enemies
+            .OrderBy(t => Vector3.Distance(transform.position, t.position))
             .FirstOrDefault();
     }
 

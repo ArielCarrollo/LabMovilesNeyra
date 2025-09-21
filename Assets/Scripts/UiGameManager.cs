@@ -1,3 +1,4 @@
+// Archivo: UiGameManager.cs (Corregido)
 using UnityEngine;
 using Unity.Netcode;
 using TMPro;
@@ -5,6 +6,7 @@ using UnityEngine.UI;
 
 public class UiGameManager : MonoBehaviour
 {
+    // ... (variables y Awake/Start sin cambios) ...
     public static UiGameManager Instance { get; private set; }
 
     [Header("Paneles")]
@@ -26,53 +28,50 @@ public class UiGameManager : MonoBehaviour
     {
         if (Instance == null) { Instance = this; } else { Destroy(gameObject); }
     }
-
     void Start()
     {
-        // Asignamos las funciones a los botones.
         loginButton.onClick.AddListener(OnLoginClicked);
         registerButton.onClick.AddListener(OnRegisterClicked);
-
-        // Al empezar, solo mostramos el panel de login.
         loginPanel.SetActive(true);
         registerPanel.SetActive(false);
         errorText.gameObject.SetActive(false);
     }
 
+
     private void OnLoginClicked()
     {
+        // ... (validación de campos sin cambios) ...
         string username = loginUsername.text;
         string password = loginPassword.text;
-
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
             ShowErrorAndReset("Usuario y contraseña no pueden estar vacíos.");
             return;
         }
-
-        // Desactivamos la UI para que el jugador no pueda hacer spam.
         SetUIInteractable(false);
 
-        // Llamamos al ServerRpc en el GameManager.
+        // --- LÍNEA CORREGIDA ---
+        // Llamamos a la función con los 3 argumentos que espera.
         GameManager.Instance.LoginPlayerServerRpc(username, password, NetworkManager.Singleton.LocalClientId);
     }
 
     private void OnRegisterClicked()
     {
+        // ... (validación de campos sin cambios) ...
         string username = registerUsername.text;
         string password = registerPassword.text;
-
         if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
         {
             ShowErrorAndReset("Usuario y contraseña no pueden estar vacíos.");
             return;
         }
-
         SetUIInteractable(false);
+
+        // --- LÍNEA CORREGIDA ---
         GameManager.Instance.RegisterPlayerServerRpc(username, password, NetworkManager.Singleton.LocalClientId);
     }
 
-    // Esta función la llamará el servidor si algo falla.
+    // ... (ShowErrorAndReset y SetUIInteractable sin cambios) ...
     public void ShowErrorAndReset(string message)
     {
         errorText.text = message;
@@ -82,8 +81,6 @@ public class UiGameManager : MonoBehaviour
 
     private void SetUIInteractable(bool isInteractable)
     {
-        // Si el login es exitoso, los paneles se desactivarán.
-        // Si falla, se reactivarán.
         loginButton.interactable = isInteractable;
         registerButton.interactable = isInteractable;
     }

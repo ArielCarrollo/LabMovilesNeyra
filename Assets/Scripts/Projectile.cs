@@ -59,13 +59,24 @@ public class Projectile : NetworkBehaviour
     private void OnTriggerEnter(Collider other)
     {
         if (!IsServer) return;
-        if (other.CompareTag("Enemy"))
+
+        // Comprobamos si es un enemigo
+        if (other.TryGetComponent<EnemyAI>(out var enemy))
         {
-            if (other.TryGetComponent<EnemyAI>(out var enemy))
-            {
-                enemy.TakeDamage(damage);
-            }
+            enemy.TakeDamage(damage);
             DestroySelf();
+            return; // Salimos para no seguir comprobando
+        }
+
+        // Comprobamos si es un jugador
+        if (other.TryGetComponent<SimplePlayerController>(out var player))
+        {
+            // Nos aseguramos de no dañar al jugador que disparó la bala
+            if (player.OwnerClientId != OwnerClientId)
+            {
+                player.TakeDamage(damage);
+                DestroySelf();
+            }
         }
     }
 

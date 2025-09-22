@@ -1,26 +1,25 @@
-using UnityEngine;
+using Unity.Collections;
+using Unity.Netcode;
 
-// No es un MonoBehaviour, es solo una clase para guardar datos.
-[System.Serializable] // Esto permite que Unity pueda "ver" la clase en el inspector si es necesario.
-public class PlayerData
+public struct PlayerData : INetworkSerializable, System.IEquatable<PlayerData>
 {
-    public string username;
-    public string password;
+    public ulong ClientId;
+    public FixedString64Bytes Username;
 
-    // Datos del juego que queremos guardar
-    public Vector3 position;
-    public int health;
-    public int attack;
-
-    // Constructor para crear un nuevo jugador con datos por defecto.
-    public PlayerData(string user, string pass)
+    public PlayerData(ulong clientId, string username)
     {
-        username = user;
-        password = pass;
+        ClientId = clientId;
+        Username = new FixedString64Bytes(username);
+    }
 
-        // Valores iniciales para un jugador recién registrado.
-        position = new Vector3(0, 1, 0); // Posición inicial de spawn.
-        health = 100;
-        attack = 10;
+    public void NetworkSerialize<T>(BufferSerializer<T> serializer) where T : IReaderWriter
+    {
+        serializer.SerializeValue(ref ClientId);
+        serializer.SerializeValue(ref Username);
+    }
+
+    public bool Equals(PlayerData other)
+    {
+        return ClientId == other.ClientId && Username == other.Username;
     }
 }

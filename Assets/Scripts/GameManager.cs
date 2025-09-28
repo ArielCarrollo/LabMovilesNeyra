@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine.SceneManagement;
 using Unity.Collections;
 using Unity.Cinemachine;
+using System.Linq; // Necesario para usar Linq
 
 public class GameManager : NetworkBehaviour
 {
@@ -13,10 +14,14 @@ public class GameManager : NetworkBehaviour
     [SerializeField] private Transform playerPrefab;
     private const string GameSceneName = "Game";
 
+    [Header("Game Settings")]
+    private const int MaxPlayers = 5; // Límite máximo de jugadores
+
     public NetworkList<PlayerData> PlayersInLobby;
 
     private Dictionary<string, string> authDataStore = new Dictionary<string, string>();
     private CinemachineImpulseSource impulseSource;
+
     void Awake()
     {
         if (Instance == null)
@@ -35,7 +40,6 @@ public class GameManager : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         if (!IsServer) return;
-
         NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnect;
     }
 
@@ -54,6 +58,11 @@ public class GameManager : NetworkBehaviour
     [Rpc(SendTo.Server)]
     public void RegisterPlayerServerRpc(string username, string password, ulong clientId)
     {
+        if (PlayersInLobby.Count >= MaxPlayers)
+        {
+            NotifyClientOfFailureClientRpc("El lobby está lleno.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
+            return;
+        }
         if (authDataStore.ContainsKey(username))
         {
             NotifyClientOfFailureClientRpc("El nombre de usuario ya está en uso.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
@@ -66,6 +75,11 @@ public class GameManager : NetworkBehaviour
     [Rpc(SendTo.Server)]
     public void LoginPlayerServerRpc(string username, string password, ulong clientId)
     {
+        if (PlayersInLobby.Count >= MaxPlayers)
+        {
+            NotifyClientOfFailureClientRpc("El lobby está lleno.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
+            return;
+        }
         if (!authDataStore.TryGetValue(username, out string pass) || pass != password)
         {
             NotifyClientOfFailureClientRpc("Usuario o contraseña incorrectos.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
@@ -73,8 +87,22 @@ public class GameManager : NetworkBehaviour
         }
 
         PlayersInLobby.Add(new PlayerData(clientId, username));
-
         LoginSuccessClientRpc(new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
+    }
+
+    [Rpc(SendTo.Server)]
+    public void ToggleReadyServerRpc(ulong clientId)
+    {
+        for (int i = 0; i < PlayersInLobby.Count; i++)
+        {
+            if (PlayersInLobby[i].ClientId == clientId)
+            {
+                PlayerData updatedPlayerData = PlayersInLobby[i];
+                updatedPlayerData.IsReady = !updatedPlayerData.IsReady;
+                PlayersInLobby[i] = updatedPlayerData;
+                break;
+            }
+        }
     }
 
     [Rpc(SendTo.Server)]
@@ -82,8 +110,26 @@ public class GameManager : NetworkBehaviour
     {
         if (!IsHost) return;
 
-        NetworkManager.Singleton.SceneManager.LoadScene(GameSceneName, LoadSceneMode.Single);
+        bool allPlayersReady = true;
+        if (PlayersInLobby.Count == 0)
+        {
+            allPlayersReady = false;
+        }
+        else
+        {
+            foreach (var player in PlayersInLobby)
+            {
+                if (!player.IsReady)
+                {
+                    allPlayersReady = false;
+                    break;
+                }
+            }
+        }
 
+        if (!allPlayersReady) return;
+
+        NetworkManager.Singleton.SceneManager.LoadScene(GameSceneName, LoadSceneMode.Single);
         NetworkManager.Singleton.SceneManager.OnLoadEventCompleted += SpawnPlayersAfterSceneLoad;
     }
 
@@ -117,10 +163,9 @@ public class GameManager : NetworkBehaviour
     {
         if (UiGameManager.Instance != null) { UiGameManager.Instance.ShowErrorAndReset(message); }
     }
+
     public void TriggerCameraShake()
     {
-        // Esta línea genera una sacudida con la configuración por defecto.
-        // Puedes ajustar la fuerza y forma en el inspector del ImpulseSource.
         if (impulseSource != null)
         {
             impulseSource.GenerateImpulse();

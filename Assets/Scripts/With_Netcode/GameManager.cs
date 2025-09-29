@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using UnityEngine.SceneManagement;
 using Unity.Collections;
 using Unity.Cinemachine;
-using System.Linq;
 
 public class GameManager : NetworkBehaviour
 {
@@ -18,7 +17,8 @@ public class GameManager : NetworkBehaviour
     private const int MaxPlayers = 5;
     public NetworkList<PlayerData> PlayersInLobby;
 
-    private Dictionary<string, string> authDataStore = new Dictionary<string, string>();
+    // Se elimina el authDataStore
+    // private Dictionary<string, string> authDataStore = new Dictionary<string, string>();
     private CinemachineImpulseSource impulseSource;
 
     void Awake()
@@ -54,40 +54,31 @@ public class GameManager : NetworkBehaviour
         }
     }
 
+    // Nuevo método para manejar jugadores después de la autenticación de Unity Cloud
     [Rpc(SendTo.Server)]
-    public void RegisterPlayerServerRpc(string username, string password, ulong clientId)
+    public void OnPlayerAuthenticatedServerRpc(string username, ulong clientId)
     {
         if (PlayersInLobby.Count >= MaxPlayers)
         {
             NotifyClientOfFailureClientRpc("El lobby está lleno.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
             return;
         }
-        if (authDataStore.ContainsKey(username))
-        {
-            NotifyClientOfFailureClientRpc("El nombre de usuario ya está en uso.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
-            return;
-        }
-        authDataStore.Add(username, password);
-        LoginPlayerServerRpc(username, password, clientId);
-    }
 
-    [Rpc(SendTo.Server)]
-    public void LoginPlayerServerRpc(string username, string password, ulong clientId)
-    {
-        if (PlayersInLobby.Count >= MaxPlayers)
+        // Opcional: Verificar si el jugador ya está en el lobby para evitar duplicados
+        foreach (var player in PlayersInLobby)
         {
-            NotifyClientOfFailureClientRpc("El lobby está lleno.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
-            return;
-        }
-        if (!authDataStore.TryGetValue(username, out string pass) || pass != password)
-        {
-            NotifyClientOfFailureClientRpc("Usuario o contraseña incorrectos.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
-            return;
+            if (player.ClientId == clientId)
+            {
+                // El jugador ya está, no hacer nada o manejar reconexión.
+                return;
+            }
         }
 
         PlayersInLobby.Add(new PlayerData(clientId, username));
         LoginSuccessClientRpc(new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
     }
+
+    // Los métodos RegisterPlayerServerRpc y LoginPlayerServerRpc han sido eliminados.
 
     [Rpc(SendTo.Server)]
     public void ToggleReadyServerRpc(ulong clientId)
@@ -103,6 +94,7 @@ public class GameManager : NetworkBehaviour
             }
         }
     }
+
     [Rpc(SendTo.Server)]
     public void ChangeAppearanceServerRpc(PlayerData newPlayerData, ulong clientId)
     {
@@ -199,7 +191,11 @@ public class GameManager : NetworkBehaviour
     [ClientRpc]
     private void NotifyClientOfFailureClientRpc(string message, ClientRpcParams clientRpcParams = default)
     {
-        if (UiGameManager.Instance != null) { UiGameManager.Instance.ShowErrorAndReset(message); }
+        // Este error ahora sería manejado por el sistema de autenticación, pero lo dejamos por si se usa para otros fines.
+        if (UiGameManager.Instance != null)
+        {
+            UiGameManager.Instance.ShowError(message);
+        }
     }
 
     public void TriggerCameraShake()

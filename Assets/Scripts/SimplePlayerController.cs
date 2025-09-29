@@ -1,7 +1,7 @@
-using System.Linq;
+Ôªøusing System.Linq;
 using Unity.Netcode;
 using UnityEngine;
-using Unity.Cinemachine; // Importante: AÒadir la referencia a Cinemachine
+using Unity.Cinemachine; // Importante: A√±adir la referencia a Cinemachine
 
 public class SimplePlayerController : NetworkBehaviour
 {
@@ -32,7 +32,7 @@ public class SimplePlayerController : NetworkBehaviour
     private NetworkVariable<bool> serverIsGrounded = new NetworkVariable<bool>();
     private float nextFireTime = 0f;
 
-    // Se eliminÛ la variable 'mainCamera' para evitar conflictos.
+    // Se elimin√≥ la variable 'mainCamera' para evitar conflictos.
     private PlayerNicknameUI nicknameUI;
     private CinemachineCamera virtualCamera;
 
@@ -45,56 +45,53 @@ public class SimplePlayerController : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        // Esta lÛgica se ejecuta en el servidor para inicializar las estadÌsticas del jugador.
-        if (IsServer)
-        {
-            CurrentHealth.Value = maxHealth;
+        // Esta l√≠nea es importante para inicializar la variable antes de usarla,
+        // aunque en la versi√≥n corregida ya no la usemos aqu√≠ para asignar el nombre.
+        nicknameUI = GetComponentInChildren<PlayerNicknameUI>();
 
-            // El servidor busca el nombre de usuario que corresponde a este jugador
-            // y lo asigna a la variable de red del nickname.
-            foreach (var playerData in GameManager.Instance.PlayersInLobby)
-            {
-                if (playerData.ClientId == OwnerClientId)
-                {
-                    nicknameUI.Nickname.Value = playerData.Username;
-                    break;
-                }
-            }
+        if (!IsOwner)
+        {
+            return;
         }
 
-        // Esta lÛgica solo se ejecuta en la m·quina del jugador que controla este personaje.
-        if (IsOwner)
+        // Encuentra la c√°mara virtual y as√≠gnala para que siga a este jugador.
+        var cinemachine = FindFirstObjectByType<CinemachineVirtualCamera>();
+        if (cinemachine != null)
         {
-            // Buscamos la c·mara virtual de Cinemachine en la escena...
-            virtualCamera = FindObjectOfType<CinemachineCamera>();
-            if (virtualCamera != null)
-            {
-                // ...y le decimos que nos siga y nos mire.
-                virtualCamera.Follow = this.transform;
-                virtualCamera.LookAt = this.transform;
-            }
-
-            // Registramos la barra de vida en el UIManager local.
-            if (UIManager.Instance != null)
-            {
-                UIManager.Instance.RegisterPlayer(CurrentHealth, maxHealth);
-            }
+            cinemachine.Follow = transform;
         }
+
+        CurrentHealth.Value = maxHealth;
+        CurrentHealth.OnValueChanged += (prev, next) =>
+        {
+            if (next <= 0)
+            {
+                Respawn();
+            }
+        };
+
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.RegisterPlayer(CurrentHealth, maxHealth);
+        }
+        else
+        {
+            Debug.LogWarning("Player spawned but UIManager.Instance was not found.");
+        }
+
+        rb = GetComponent<Rigidbody>();
+        animator = GetComponent<Animator>();
     }
 
-    // Se eliminÛ el mÈtodo Start() ya que su lÛgica fue movida a OnNetworkSpawn
-    // para asegurar que se ejecute en el momento correcto del ciclo de vida de la red.
 
     void Update()
     {
-        // La guardia de autoridad: solo el dueÒo puede procesar inputs.
         if (!IsOwner) return;
 
         HandleMovementInput();
         UpdateTargetAndShoot();
     }
 
-    // --- Toda la lÛgica de combate, movimiento y daÒo permanece intacta ---
 
     public void TakeDamage(int amount)
     {
@@ -111,11 +108,9 @@ public class SimplePlayerController : NetworkBehaviour
     [ClientRpc]
     private void TriggerCameraShakeClientRpc()
     {
-        // Cada cliente le pide a su GameManager local que active el impulso de Cinemachine.
         GameManager.Instance.TriggerCameraShake();
     }
 
-    // (El resto de tus funciones: Respawn, UpdateTargetAndShoot, FixedUpdate, etc. no necesitan cambios)
     private void UpdateTargetAndShoot()
     {
         if (Time.time >= nextFireTime && Input.GetButton("Fire1"))

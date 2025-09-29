@@ -1,10 +1,10 @@
-using UnityEngine;
+Ôªøusing UnityEngine;
 using Unity.Netcode;
 using System.Collections.Generic;
 using UnityEngine.SceneManagement;
 using Unity.Collections;
 using Unity.Cinemachine;
-using System.Linq; // Necesario para usar Linq
+using System.Linq;
 
 public class GameManager : NetworkBehaviour
 {
@@ -15,8 +15,7 @@ public class GameManager : NetworkBehaviour
     private const string GameSceneName = "Game";
 
     [Header("Game Settings")]
-    private const int MaxPlayers = 5; // LÌmite m·ximo de jugadores
-
+    private const int MaxPlayers = 5;
     public NetworkList<PlayerData> PlayersInLobby;
 
     private Dictionary<string, string> authDataStore = new Dictionary<string, string>();
@@ -60,12 +59,12 @@ public class GameManager : NetworkBehaviour
     {
         if (PlayersInLobby.Count >= MaxPlayers)
         {
-            NotifyClientOfFailureClientRpc("El lobby est· lleno.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
+            NotifyClientOfFailureClientRpc("El lobby est√° lleno.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
             return;
         }
         if (authDataStore.ContainsKey(username))
         {
-            NotifyClientOfFailureClientRpc("El nombre de usuario ya est· en uso.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
+            NotifyClientOfFailureClientRpc("El nombre de usuario ya est√° en uso.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
             return;
         }
         authDataStore.Add(username, password);
@@ -77,12 +76,12 @@ public class GameManager : NetworkBehaviour
     {
         if (PlayersInLobby.Count >= MaxPlayers)
         {
-            NotifyClientOfFailureClientRpc("El lobby est· lleno.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
+            NotifyClientOfFailureClientRpc("El lobby est√° lleno.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
             return;
         }
         if (!authDataStore.TryGetValue(username, out string pass) || pass != password)
         {
-            NotifyClientOfFailureClientRpc("Usuario o contraseÒa incorrectos.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
+            NotifyClientOfFailureClientRpc("Usuario o contrase√±a incorrectos.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
             return;
         }
 
@@ -100,6 +99,18 @@ public class GameManager : NetworkBehaviour
                 PlayerData updatedPlayerData = PlayersInLobby[i];
                 updatedPlayerData.IsReady = !updatedPlayerData.IsReady;
                 PlayersInLobby[i] = updatedPlayerData;
+                break;
+            }
+        }
+    }
+    [Rpc(SendTo.Server)]
+    public void ChangeAppearanceServerRpc(PlayerData newPlayerData, ulong clientId)
+    {
+        for (int i = 0; i < PlayersInLobby.Count; i++)
+        {
+            if (PlayersInLobby[i].ClientId == clientId)
+            {
+                PlayersInLobby[i] = newPlayerData;
                 break;
             }
         }
@@ -150,6 +161,33 @@ public class GameManager : NetworkBehaviour
         Transform playerInstance = Instantiate(playerPrefab);
         NetworkObject networkObject = playerInstance.GetComponent<NetworkObject>();
         networkObject.SpawnWithOwnership(clientId, true);
+
+        PlayerData playerDataToSpawn = new PlayerData();
+        bool foundPlayer = false;
+        foreach (var p in PlayersInLobby)
+        {
+            if (p.ClientId == clientId)
+            {
+                playerDataToSpawn = p;
+                foundPlayer = true;
+                break;
+            }
+        }
+
+        if (foundPlayer)
+        {
+            PlayerAppearance appearance = playerInstance.GetComponent<PlayerAppearance>();
+            if (appearance != null)
+            {
+                appearance.PlayerCustomData.Value = playerDataToSpawn;
+            }
+
+            PlayerNicknameUI nicknameUI = playerInstance.GetComponentInChildren<PlayerNicknameUI>();
+            if (nicknameUI != null)
+            {
+                nicknameUI.Nickname.Value = playerDataToSpawn.Username;
+            }
+        }
     }
 
     [ClientRpc]

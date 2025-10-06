@@ -18,8 +18,6 @@ public class GameManager : NetworkBehaviour
     private const int MaxPlayers = 5;
     public NetworkList<PlayerData> PlayersInLobby;
 
-    // Se elimina el authDataStore
-    // private Dictionary<string, string> authDataStore = new Dictionary<string, string>();
     private CinemachineImpulseSource impulseSource;
 
     [Header("Leveling System")]
@@ -58,13 +56,11 @@ public class GameManager : NetworkBehaviour
         }
     }
 
-    // Nuevo método para manejar jugadores después de la autenticación de Unity Cloud
     [Rpc(SendTo.Server)]
     public void OnPlayerAuthenticatedServerRpc(string username, ulong clientId)
     {
         if (PlayersInLobby.Count >= MaxPlayers)
         {
-            // Construcción explícita de ClientRpcParams para evitar errores
             var clientRpcParams = new ClientRpcParams
             {
                 Send = new ClientRpcSendParams
@@ -127,23 +123,18 @@ public class GameManager : NetworkBehaviour
 
                 if (leveledUp)
                 {
-                    // Iteramos a través de TODOS los objetos que existen en la red.
                     foreach (NetworkObject spawnedObject in NetworkManager.Singleton.SpawnManager.SpawnedObjects.Values)
                     {
-                        // Buscamos el objeto que le pertenece al jugador que subió de nivel.
                         if (spawnedObject.OwnerClientId == playerId)
                         {
-                            // Nos aseguramos de que sea un personaje jugador (y no otro objeto).
                             if (spawnedObject.TryGetComponent<SimplePlayerController>(out _))
                             {
-                                // Obtenemos su UI y actualizamos el nivel.
                                 PlayerNicknameUI nicknameUI = spawnedObject.GetComponentInChildren<PlayerNicknameUI>();
                                 if (nicknameUI != null)
 
                                 {
                                     nicknameUI.Level.Value = updatedData.Level;
                                 }
-                                // Encontramos al jugador, rompemos el bucle para no seguir buscando.
                                 break;
                             }
                         }
@@ -164,16 +155,11 @@ public class GameManager : NetworkBehaviour
     [ClientRpc]
     private void SaveChangesToCloudClientRpc(PlayerData data, ClientRpcParams clientRpcParams = default)
     {
-        // Este método ya no es 'async'.
-        // Solo se ejecuta en el cliente dueño de los datos.
         if (!IsOwner) return;
-
-        // Llamamos a una nueva función asíncrona que manejará el guardado.
         SaveChangesToCloudAsync(data);
     }
     private async void SaveChangesToCloudAsync(PlayerData data)
     {
-        // Esta función sí es 'async', pero no es un RPC.
         CloudAuthManager.Instance.UpdateLocalData(data);
         await CloudAuthManager.Instance.SavePlayerProgress();
     }
@@ -240,31 +226,29 @@ public class GameManager : NetworkBehaviour
 
         foreach (var playerInfo in PlayersInLobby)
         {
-            SpawnPlayer(playerInfo); // --- Pasamos toda la PlayerData ---
+            SpawnPlayer(playerInfo); 
         }
 
         NetworkManager.Singleton.SceneManager.OnLoadEventCompleted -= SpawnPlayersAfterSceneLoad;
     }
 
-    private void SpawnPlayer(PlayerData playerDataToSpawn) // --- Recibimos toda la PlayerData ---
+    private void SpawnPlayer(PlayerData playerDataToSpawn) 
     {
         Transform playerInstance = Instantiate(playerPrefab);
         NetworkObject networkObject = playerInstance.GetComponent<NetworkObject>();
         networkObject.SpawnWithOwnership(playerDataToSpawn.ClientId, true);
 
-        // Ya no necesitamos buscar al jugador, lo recibimos directamente
         PlayerAppearance appearance = playerInstance.GetComponent<PlayerAppearance>();
         if (appearance != null)
         {
             appearance.PlayerCustomData.Value = playerDataToSpawn;
         }
 
-        // --- LA CORRECCIÓN CLAVE ---
         PlayerNicknameUI nicknameUI = playerInstance.GetComponentInChildren<PlayerNicknameUI>();
         if (nicknameUI != null)
         {
             nicknameUI.Nickname.Value = playerDataToSpawn.Username;
-            nicknameUI.Level.Value = playerDataToSpawn.Level; // <-- ASIGNAMOS EL NIVEL
+            nicknameUI.Level.Value = playerDataToSpawn.Level; 
         }
     }
 
@@ -277,7 +261,6 @@ public class GameManager : NetworkBehaviour
     [ClientRpc]
     private void NotifyClientOfFailureClientRpc(string message, ClientRpcParams clientRpcParams = default)
     {
-        // Este error ahora sería manejado por el sistema de autenticación, pero lo dejamos por si se usa para otros fines.
         if (UiGameManager.Instance != null)
         {
             UiGameManager.Instance.ShowError(message);
@@ -301,7 +284,6 @@ public class GameManager : NetworkBehaviour
         {
             if (PlayersInLobby[i].ClientId == clientId)
             {
-                // Como PlayerData es un struct, debemos reemplazarlo, no modificarlo directamente
                 PlayerData updatedPlayer = PlayersInLobby[i];
                 updatedPlayer.Username = newName;
                 PlayersInLobby[i] = updatedPlayer;

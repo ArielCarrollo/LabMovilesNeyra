@@ -10,7 +10,7 @@ public class LobbyUIManager : MonoBehaviour
     [SerializeField] private Button startGameButton;
     [SerializeField] private Button readyButton;
     [SerializeField] private TextMeshProUGUI readyButtonText;
-    [SerializeField] private TextMeshProUGUI statusText; // Aunque no se use, lo mantenemos por si acaso
+    [SerializeField] private TextMeshProUGUI statusText; 
     [SerializeField] private TextMeshProUGUI readyCountText;
 
     [Header("Player List")]
@@ -39,18 +39,15 @@ public class LobbyUIManager : MonoBehaviour
     [SerializeField] private Slider xpBar;
     [SerializeField] private TextMeshProUGUI levelText;
 
-    private PlayerData localPlayerData; // Necesario para la personalización
+    private PlayerData localPlayerData; 
 
     public void Initialize()
     {
-        // 1. Suscribirse a UN SOLO evento para actualizar la UI cuando la lista cambie.
         GameManager.Instance.PlayersInLobby.OnListChanged += OnPlayersListChanged;
 
-        // 2. Configurar los listeners de los botones.
         startGameButton.onClick.AddListener(() => GameManager.Instance.StartGameServerRpc());
         readyButton.onClick.AddListener(() => GameManager.Instance.ToggleReadyServerRpc(NetworkManager.Singleton.LocalClientId));
 
-        // Listeners de personalización
         nextBodyButton.onClick.AddListener(() => ChangePart(0, 1));
         prevBodyButton.onClick.AddListener(() => ChangePart(0, -1));
         nextEyesButton.onClick.AddListener(() => ChangePart(1, 1));
@@ -58,25 +55,20 @@ public class LobbyUIManager : MonoBehaviour
         nextGlovesButton.onClick.AddListener(() => ChangePart(2, 1));
         prevGlovesButton.onClick.AddListener(() => ChangePart(2, -1));
 
-        // Listeners de gestión de nombre
         saveNameButton.onClick.AddListener(OnSaveNameClicked);
         CloudAuthManager.Instance.OnPlayerNameUpdated += HandlePlayerNameUpdated;
 
-        // 3. Activar el panel del lobby.
         lobbyPanel.SetActive(true);
 
-        // 4. Configurar la UI inicial del jugador local (nombre).
         string currentName = CloudAuthManager.Instance.GetPlayerName();
         playerNameText.text = $"Jugador: {currentName}";
         nameChangeInputField.text = currentName;
 
-        // 5. Llamar a la función de actualización para mostrar el estado inicial de TODO el lobby.
         UpdateLobbyDisplay();
     }
 
     private void OnDestroy()
     {
-        // Limpiar suscripciones para evitar errores
         if (GameManager.Instance != null)
         {
             GameManager.Instance.PlayersInLobby.OnListChanged -= OnPlayersListChanged;
@@ -110,13 +102,11 @@ public class LobbyUIManager : MonoBehaviour
         GameManager.Instance.ChangeAppearanceServerRpc(updatedData, NetworkManager.Singleton.LocalClientId);
     }
 
-    // El callback del evento ahora solo llama a la función principal
     private void OnPlayersListChanged(NetworkListEvent<PlayerData> changeEvent)
     {
         UpdateLobbyDisplay();
     }
 
-    // Esta función se encarga de redibujar todo el lobby
     private void UpdateLobbyDisplay()
     {
         if (GameManager.Instance == null) return;
@@ -149,8 +139,6 @@ public class LobbyUIManager : MonoBehaviour
             {
                 localPlayerData = player;
 
-                // --- LA CORRECCIÓN CLAVE ---
-                // Cambiamos 'UpdateAppearance' por 'ApplyAppearance'
                 if (previewPlayer != null)
                 {
                     previewPlayer.ApplyAppearance(player);

@@ -41,7 +41,7 @@ public class CloudAuthManager : MonoBehaviour
         try
         {
             var options = new InitializationOptions();
-            options.SetEnvironmentName("production"); // O el entorno que estés usando
+            options.SetEnvironmentName("production");
             await UnityServices.InitializeAsync(options);
             Debug.Log("Unity Services Initialized: " + UnityServices.State);
         }
@@ -57,23 +57,20 @@ public class CloudAuthManager : MonoBehaviour
         await InitializeUnityServices();
         try
         {
-            // El registro inicia sesión automáticamente si tiene éxito
             await AuthenticationService.Instance.SignUpWithUsernamePasswordAsync(username, password);
 
             playerId = AuthenticationService.Instance.PlayerId;
-            playerName = username; // Al registrar, el nombre de usuario es el nombre por defecto
+            playerName = username; 
 
             Debug.Log($"Sign Up & Sign In Successful. Player ID: {playerId}, Player Name: {playerName}");
 
-            // Invocamos el éxito directamente desde aquí
             await UpdatePlayerNameAsync(username);
-            LocalPlayerData = new PlayerData(0, username); // Creamos datos por defecto
+            LocalPlayerData = new PlayerData(0, username); 
             await SavePlayerProgress();
             OnSignInSuccess?.Invoke();
         }
         catch (AuthenticationException ex)
         {
-            // Convertimos los códigos de error en mensajes claros para el usuario
             string errorMessage = ConvertExceptionToMessage(ex);
             Debug.LogException(ex);
             OnSignInFailed?.Invoke(errorMessage);
@@ -97,7 +94,7 @@ public class CloudAuthManager : MonoBehaviour
             await AuthenticationService.Instance.UpdatePlayerNameAsync(newName);
             this.playerName = newName;
             Debug.Log($"Nombre actualizado exitosamente a: {newName}");
-            OnPlayerNameUpdated?.Invoke(newName); // Notificar a los suscriptores
+            OnPlayerNameUpdated?.Invoke(newName);
         }
         catch (AuthenticationException ex)
         {
@@ -156,23 +153,20 @@ public class CloudAuthManager : MonoBehaviour
 
             if (serverData.TryGetValue(PLAYER_PROGRESS_KEY, out var data))
             {
-                // Si encontramos datos, los deserializamos
                 string jsonData = data.Value.GetAs<string>();
                 LocalPlayerData = JsonConvert.DeserializeObject<PlayerData>(jsonData);
                 Debug.Log("Datos del jugador cargados desde la nube.");
             }
             else
             {
-                // Si no hay datos (es la primera vez que inicia sesión tras la actualización), creamos datos por defecto
                 Debug.Log("No se encontraron datos en la nube. Creando datos locales por defecto.");
-                LocalPlayerData = new PlayerData(0, GetPlayerName()); // Usamos el nombre ya cargado
-                await SavePlayerProgress(); // Y los guardamos en la nube para la próxima vez
+                LocalPlayerData = new PlayerData(0, GetPlayerName()); 
+                await SavePlayerProgress(); 
             }
         }
         catch (Exception e)
         {
             Debug.LogError("Error al cargar los datos del jugador: " + e);
-            // Si falla la carga, usamos datos locales para no bloquear el juego
             LocalPlayerData = new PlayerData(0, GetPlayerName());
         }
     }

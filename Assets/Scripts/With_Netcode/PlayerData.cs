@@ -2,14 +2,13 @@
 using Unity.Netcode;
 using System;
 
-[System.Serializable] // Añadido para poder serializarlo a JSON
+[System.Serializable] 
 public struct PlayerData : INetworkSerializable, IEquatable<PlayerData>
 {
     public ulong ClientId;
     public FixedString64Bytes Username;
     public bool IsReady;
 
-    // --- Nuevos Campos ---
     public int Level;
     public int CurrentXP;
 
@@ -23,7 +22,6 @@ public struct PlayerData : INetworkSerializable, IEquatable<PlayerData>
         Username = new FixedString64Bytes(username);
         IsReady = isReady;
 
-        // --- Valores por defecto ---
         Level = 1;
         CurrentXP = 0;
 

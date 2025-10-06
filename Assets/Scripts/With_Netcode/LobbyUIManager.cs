@@ -2,16 +2,15 @@ using UnityEngine;
 using Unity.Netcode;
 using UnityEngine.UI;
 using TMPro;
-using System.Linq; 
 
 public class LobbyUIManager : MonoBehaviour
 {
     [Header("UI Elements")]
     [SerializeField] private GameObject lobbyPanel;
     [SerializeField] private Button startGameButton;
-    [SerializeField] private Button readyButton; 
+    [SerializeField] private Button readyButton;
     [SerializeField] private TextMeshProUGUI readyButtonText;
-    [SerializeField] private TextMeshProUGUI statusText;
+    [SerializeField] private TextMeshProUGUI statusText; // Aunque no se use, lo mantenemos por si acaso
     [SerializeField] private TextMeshProUGUI readyCountText;
 
     [Header("Player List")]
@@ -23,7 +22,6 @@ public class LobbyUIManager : MonoBehaviour
     [SerializeField] private Color notReadyColor = Color.white;
 
     [Header("Customization")]
-    [Tooltip("Un modelo del jugador en la escena del Lobby para vista previa")]
     [SerializeField] private PlayerAppearance previewPlayer;
     [SerializeField] private Button nextBodyButton;
     [SerializeField] private Button prevBodyButton;
@@ -31,46 +29,69 @@ public class LobbyUIManager : MonoBehaviour
     [SerializeField] private Button prevEyesButton;
     [SerializeField] private Button nextGlovesButton;
     [SerializeField] private Button prevGlovesButton;
-    private PlayerData localPlayerData;
 
+    [Header("Player Name Management")]
+    [SerializeField] private TextMeshProUGUI playerNameText;
+    [SerializeField] private TMP_InputField nameChangeInputField;
+    [SerializeField] private Button saveNameButton;
+
+    [Header("Player Progression")]
+    [SerializeField] private Slider xpBar;
+    [SerializeField] private TextMeshProUGUI levelText;
+
+    private PlayerData localPlayerData; // Necesario para la personalización
 
     public void Initialize()
     {
-        GameManager.Instance.PlayersInLobby.OnListChanged += UpdateLobbyUI;
+        // 1. Suscribirse a UN SOLO evento para actualizar la UI cuando la lista cambie.
+        GameManager.Instance.PlayersInLobby.OnListChanged += OnPlayersListChanged;
 
-        startGameButton.onClick.AddListener(() => {
-            GameManager.Instance.StartGameServerRpc();
-        });
+        // 2. Configurar los listeners de los botones.
+        startGameButton.onClick.AddListener(() => GameManager.Instance.StartGameServerRpc());
+        readyButton.onClick.AddListener(() => GameManager.Instance.ToggleReadyServerRpc(NetworkManager.Singleton.LocalClientId));
 
-        readyButton.onClick.AddListener(() => {
-            GameManager.Instance.ToggleReadyServerRpc(NetworkManager.Singleton.LocalClientId);
-        });
-
-        lobbyPanel.SetActive(true);
-        UpdateLobbyUI(new NetworkListEvent<PlayerData>());
+        // Listeners de personalización
         nextBodyButton.onClick.AddListener(() => ChangePart(0, 1));
         prevBodyButton.onClick.AddListener(() => ChangePart(0, -1));
         nextEyesButton.onClick.AddListener(() => ChangePart(1, 1));
         prevEyesButton.onClick.AddListener(() => ChangePart(1, -1));
         nextGlovesButton.onClick.AddListener(() => ChangePart(2, 1));
         prevGlovesButton.onClick.AddListener(() => ChangePart(2, -1));
+
+        // Listeners de gestión de nombre
+        saveNameButton.onClick.AddListener(OnSaveNameClicked);
+        CloudAuthManager.Instance.OnPlayerNameUpdated += HandlePlayerNameUpdated;
+
+        // 3. Activar el panel del lobby.
+        lobbyPanel.SetActive(true);
+
+        // 4. Configurar la UI inicial del jugador local (nombre).
+        string currentName = CloudAuthManager.Instance.GetPlayerName();
+        playerNameText.text = $"Jugador: {currentName}";
+        nameChangeInputField.text = currentName;
+
+        // 5. Llamar a la función de actualización para mostrar el estado inicial de TODO el lobby.
+        UpdateLobbyDisplay();
     }
 
     private void OnDestroy()
     {
+        // Limpiar suscripciones para evitar errores
         if (GameManager.Instance != null)
         {
-            GameManager.Instance.PlayersInLobby.OnListChanged -= UpdateLobbyUI;
+            GameManager.Instance.PlayersInLobby.OnListChanged -= OnPlayersListChanged;
+        }
+        if (CloudAuthManager.Instance != null)
+        {
+            CloudAuthManager.Instance.OnPlayerNameUpdated -= HandlePlayerNameUpdated;
         }
     }
+
     private void ChangePart(int partIndex, int direction)
     {
         int maxIndex = 0;
-
-        // Aquí guardas una copia de los datos actuales
         PlayerData updatedData = localPlayerData;
 
-        // Lógica para cambiar el índice de la pieza correcta
         switch (partIndex)
         {
             case 0: // Cuerpo
@@ -85,91 +106,93 @@ public class LobbyUIManager : MonoBehaviour
                 maxIndex = previewPlayer.transform.Find("Gloves").childCount;
                 updatedData.GlovesIndex = (localPlayerData.GlovesIndex + direction + maxIndex) % maxIndex;
                 break;
-                // ... Añade un case para cada parte del cuerpo ...
         }
-
-        // Envía la petición de cambio al servidor con TODOS los datos actualizados
         GameManager.Instance.ChangeAppearanceServerRpc(updatedData, NetworkManager.Singleton.LocalClientId);
     }
-    private void UpdateLobbyUI(NetworkListEvent<PlayerData> changeEvent)
-    {
-        if (!NetworkManager.Singleton.IsConnectedClient || GameManager.Instance == null) return;
 
-        lobbyPanel.SetActive(true);
+    // El callback del evento ahora solo llama a la función principal
+    private void OnPlayersListChanged(NetworkListEvent<PlayerData> changeEvent)
+    {
+        UpdateLobbyDisplay();
+    }
+
+    // Esta función se encarga de redibujar todo el lobby
+    private void UpdateLobbyDisplay()
+    {
+        if (GameManager.Instance == null) return;
 
         foreach (Transform child in playerListContent)
         {
             Destroy(child.gameObject);
         }
+
         int readyCount = 0;
+        bool allPlayersReady = GameManager.Instance.PlayersInLobby.Count > 0;
+
         foreach (var player in GameManager.Instance.PlayersInLobby)
         {
+            GameObject card = Instantiate(playerCardPrefab, playerListContent);
+            card.GetComponentInChildren<TextMeshProUGUI>().text = player.Username.ToString();
+            Image cardImage = card.GetComponent<Image>();
+            cardImage.color = player.IsReady ? readyColor : notReadyColor;
+
             if (player.IsReady)
             {
                 readyCount++;
             }
-        }
-        // Buscamos los datos del jugador local
-        bool localPlayerFound = false;
-        foreach (var player in GameManager.Instance.PlayersInLobby)
-        {
+            else
+            {
+                allPlayersReady = false;
+            }
+
             if (player.ClientId == NetworkManager.Singleton.LocalClientId)
             {
-                localPlayerData = player; // Guardamos los datos del jugador local
-                localPlayerFound = true;
-                break;
+                localPlayerData = player;
+
+                // --- LA CORRECCIÓN CLAVE ---
+                // Cambiamos 'UpdateAppearance' por 'ApplyAppearance'
+                if (previewPlayer != null)
+                {
+                    previewPlayer.ApplyAppearance(player);
+                }
+
+                UpdateExperienceUI(player);
+                readyButtonText.text = player.IsReady ? "No Listo" : "Listo";
             }
         }
 
-        // Actualizamos el modelo de vista previa si existimos en la lista
-        if (localPlayerFound && previewPlayer != null)
-        {
-            previewPlayer.ApplyAppearance(localPlayerData);
-        }
-        int totalPlayers = GameManager.Instance.PlayersInLobby.Count;
-        readyCountText.text = $"Listos: {readyCount}/{totalPlayers}";
-
-        bool allPlayersReady = totalPlayers > 0 && readyCount == totalPlayers;
+        readyCountText.text = $"{readyCount} / {GameManager.Instance.PlayersInLobby.Count}";
         startGameButton.gameObject.SetActive(NetworkManager.Singleton.IsHost);
         startGameButton.interactable = allPlayersReady;
-        PlayerData localPlayer = new PlayerData(); // Struct por defecto
-        foreach (var player in GameManager.Instance.PlayersInLobby)
+    }
+
+    private void UpdateExperienceUI(PlayerData data)
+    {
+        if (GameManager.Instance == null) return;
+        int xpNeededForNextLevel = GameManager.Instance.GetXpForLevel(data.Level);
+
+        levelText.text = $"Nivel {data.Level} | ({data.CurrentXP} / {xpNeededForNextLevel} XP)";
+        xpBar.maxValue = xpNeededForNextLevel;
+        xpBar.value = data.CurrentXP;
+    }
+
+    private async void OnSaveNameClicked()
+    {
+        string newName = nameChangeInputField.text;
+        if (string.IsNullOrWhiteSpace(newName) || newName.Length < 3)
         {
-            if (player.ClientId == NetworkManager.Singleton.LocalClientId)
-            {
-                localPlayer = player;
-                localPlayerFound = true;
-                break;
-            }
+            Debug.LogError("El nombre debe tener al menos 3 caracteres.");
+            return;
         }
 
-        if (localPlayerFound)
-        {
-            readyButtonText.text = localPlayer.IsReady ? "No Listo" : "Listo";
-        }
+        saveNameButton.interactable = false;
+        await CloudAuthManager.Instance.UpdatePlayerNameAsync(newName);
+        saveNameButton.interactable = true;
+    }
 
-        if (totalPlayers == 0 && !NetworkManager.Singleton.IsHost)
-        {
-            statusText.text = "Esperando a que el Host cree una sala...";
-            statusText.gameObject.SetActive(true);
-            readyCountText.gameObject.SetActive(false);
-        }
-        else
-        {
-            statusText.gameObject.SetActive(false);
-            readyCountText.gameObject.SetActive(true);
-
-            foreach (var player in GameManager.Instance.PlayersInLobby)
-            {
-                GameObject card = Instantiate(playerCardPrefab, playerListContent);
-                card.GetComponentInChildren<TextMeshProUGUI>().text = player.Username.ToString();
-
-                Image cardImage = card.GetComponent<Image>();
-                if (cardImage != null)
-                {
-                    cardImage.color = player.IsReady ? readyColor : notReadyColor;
-                }
-            }
-        }
+    private void HandlePlayerNameUpdated(string newName)
+    {
+        playerNameText.text = $"Jugador: {newName}";
+        GameManager.Instance.UpdatePlayerNameServerRpc(newName);
     }
 }

@@ -18,6 +18,9 @@ public class EnemyAI : NetworkBehaviour
     private NavMeshAgent agent;
     private Transform currentTarget;
 
+    [Header("Progression")]
+    [SerializeField] private int xpValue = 15;
+
     public override void OnNetworkSpawn()
     {
         agent = GetComponent<NavMeshAgent>();
@@ -39,8 +42,7 @@ public class EnemyAI : NetworkBehaviour
     {
         return maxHealth;
     }
-
-    public void TakeDamage(int damageAmount)
+    public void TakeDamage(int damageAmount, ulong attackerId) // --- Firma modificada ---
     {
         if (!IsServer) return;
 
@@ -48,6 +50,9 @@ public class EnemyAI : NetworkBehaviour
 
         if (CurrentHealth.Value <= 0)
         {
+            // --- Otorgar XP al atacante ---
+            GameManager.Instance.AwardExperienceServerRpc(attackerId, xpValue);
+
             if (gameObject != null && IsSpawned)
             {
                 GetComponent<NetworkObject>().Despawn();

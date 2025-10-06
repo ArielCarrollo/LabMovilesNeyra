@@ -2,20 +2,30 @@
 using Unity.Netcode;
 using System;
 
+[System.Serializable] // Añadido para poder serializarlo a JSON
 public struct PlayerData : INetworkSerializable, IEquatable<PlayerData>
 {
     public ulong ClientId;
     public FixedString64Bytes Username;
     public bool IsReady;
 
+    // --- Nuevos Campos ---
+    public int Level;
+    public int CurrentXP;
+
     public int BodyIndex;
     public int EyesIndex;
     public int GlovesIndex;
+
     public PlayerData(ulong clientId, string username, bool isReady = false)
     {
         ClientId = clientId;
         Username = new FixedString64Bytes(username);
         IsReady = isReady;
+
+        // --- Valores por defecto ---
+        Level = 1;
+        CurrentXP = 0;
 
         BodyIndex = 0;
         EyesIndex = 0;
@@ -28,11 +38,13 @@ public struct PlayerData : INetworkSerializable, IEquatable<PlayerData>
         serializer.SerializeValue(ref Username);
         serializer.SerializeValue(ref IsReady);
 
-        // ▼▼▼ SERIALIZAR NUEVOS DATOS ▼▼▼
+        // --- Serializar nuevos datos ---
+        serializer.SerializeValue(ref Level);
+        serializer.SerializeValue(ref CurrentXP);
+
         serializer.SerializeValue(ref BodyIndex);
         serializer.SerializeValue(ref EyesIndex);
         serializer.SerializeValue(ref GlovesIndex);
-        // ... serializa las demás ...
     }
 
     public bool Equals(PlayerData other)
@@ -40,8 +52,10 @@ public struct PlayerData : INetworkSerializable, IEquatable<PlayerData>
         return ClientId == other.ClientId &&
                Username == other.Username &&
                IsReady == other.IsReady &&
+               Level == other.Level &&           // --- Añadido a la comparación ---
+               CurrentXP == other.CurrentXP &&   // --- Añadido a la comparación ---
                BodyIndex == other.BodyIndex &&
                EyesIndex == other.EyesIndex &&
-               GlovesIndex == other.GlovesIndex; 
+               GlovesIndex == other.GlovesIndex;
     }
 }

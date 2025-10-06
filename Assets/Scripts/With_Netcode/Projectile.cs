@@ -88,7 +88,8 @@ public class Projectile : NetworkBehaviour
 
         if (target.TryGetComponent<EnemyAI>(out var enemy))
         {
-            enemy.TakeDamage(totalDamage);
+            // --- Pasamos el ID del atacante ---
+            enemy.TakeDamage(totalDamage, shooterOwnerId);
         }
         else if (target.TryGetComponent<SimplePlayerController>(out var player))
         {

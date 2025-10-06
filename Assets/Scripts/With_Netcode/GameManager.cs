@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine.SceneManagement;
 using Unity.Collections;
 using Unity.Cinemachine;
+using System.Threading.Tasks;
 
 public class GameManager : NetworkBehaviour
 {
@@ -21,6 +22,9 @@ public class GameManager : NetworkBehaviour
     // private Dictionary<string, string> authDataStore = new Dictionary<string, string>();
     private CinemachineImpulseSource impulseSource;
 
+    [Header("Leveling System")]
+    [SerializeField] private int baseXpToLevelUp = 100;
+    [SerializeField] private float xpMultiplierPerLevel = 1.2f;
     void Awake()
     {
         if (Instance == null)
@@ -74,11 +78,65 @@ public class GameManager : NetworkBehaviour
             }
         }
 
-        PlayersInLobby.Add(new PlayerData(clientId, username));
+        PlayerData loadedData = CloudAuthManager.Instance.LocalPlayerData;
+        loadedData.ClientId = clientId; // Asignamos el ClientId de la sesión actual
+        loadedData.Username = username; // Y el nombre de usuario
+
+        PlayersInLobby.Add(loadedData);
         LoginSuccessClientRpc(new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
     }
 
-    // Los métodos RegisterPlayerServerRpc y LoginPlayerServerRpc han sido eliminados.
+    public int GetXpForLevel(int level)
+    {
+        return Mathf.FloorToInt(baseXpToLevelUp * Mathf.Pow(level, xpMultiplierPerLevel));
+    }
+
+    [Rpc(SendTo.Server)]
+    public void AwardExperienceServerRpc(ulong playerId, int amount)
+    {
+        for (int i = 0; i < PlayersInLobby.Count; i++)
+        {
+            if (PlayersInLobby[i].ClientId == playerId)
+            {
+                PlayerData updatedData = PlayersInLobby[i];
+                updatedData.CurrentXP += amount;
+
+                int xpNeeded = GetXpForLevel(updatedData.Level);
+
+                // Comprobar si sube de nivel (puede subir varios niveles de golpe)
+                while (updatedData.CurrentXP >= xpNeeded)
+                {
+                    updatedData.Level++;
+                    updatedData.CurrentXP -= xpNeeded;
+                    xpNeeded = GetXpForLevel(updatedData.Level);
+                }
+
+                PlayersInLobby[i] = updatedData;
+
+                // --- Guardar progreso en la nube ---
+                SaveChangesToCloudClientRpc(updatedData, new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { playerId } } });
+
+                return;
+            }
+        }
+    }
+
+    [ClientRpc]
+    private void SaveChangesToCloudClientRpc(PlayerData data, ClientRpcParams clientRpcParams = default)
+    {
+        // Este método ya no es 'async'.
+        // Solo se ejecuta en el cliente dueño de los datos.
+        if (!IsOwner) return;
+
+        // Llamamos a una nueva función asíncrona que manejará el guardado.
+        SaveChangesToCloudAsync(data);
+    }
+    private async void SaveChangesToCloudAsync(PlayerData data)
+    {
+        // Esta función sí es 'async', pero no es un RPC.
+        CloudAuthManager.Instance.UpdateLocalData(data);
+        await CloudAuthManager.Instance.SavePlayerProgress();
+    }
 
     [Rpc(SendTo.Server)]
     public void ToggleReadyServerRpc(ulong clientId)
@@ -142,43 +200,31 @@ public class GameManager : NetworkBehaviour
 
         foreach (var playerInfo in PlayersInLobby)
         {
-            SpawnPlayer(playerInfo.ClientId);
+            SpawnPlayer(playerInfo); // --- Pasamos toda la PlayerData ---
         }
 
         NetworkManager.Singleton.SceneManager.OnLoadEventCompleted -= SpawnPlayersAfterSceneLoad;
     }
 
-    private void SpawnPlayer(ulong clientId)
+    private void SpawnPlayer(PlayerData playerDataToSpawn) // --- Recibimos toda la PlayerData ---
     {
         Transform playerInstance = Instantiate(playerPrefab);
         NetworkObject networkObject = playerInstance.GetComponent<NetworkObject>();
-        networkObject.SpawnWithOwnership(clientId, true);
+        networkObject.SpawnWithOwnership(playerDataToSpawn.ClientId, true);
 
-        PlayerData playerDataToSpawn = new PlayerData();
-        bool foundPlayer = false;
-        foreach (var p in PlayersInLobby)
+        // Ya no necesitamos buscar al jugador, lo recibimos directamente
+        PlayerAppearance appearance = playerInstance.GetComponent<PlayerAppearance>();
+        if (appearance != null)
         {
-            if (p.ClientId == clientId)
-            {
-                playerDataToSpawn = p;
-                foundPlayer = true;
-                break;
-            }
+            appearance.PlayerCustomData.Value = playerDataToSpawn;
         }
 
-        if (foundPlayer)
+        // --- LA CORRECCIÓN CLAVE ---
+        PlayerNicknameUI nicknameUI = playerInstance.GetComponentInChildren<PlayerNicknameUI>();
+        if (nicknameUI != null)
         {
-            PlayerAppearance appearance = playerInstance.GetComponent<PlayerAppearance>();
-            if (appearance != null)
-            {
-                appearance.PlayerCustomData.Value = playerDataToSpawn;
-            }
-
-            PlayerNicknameUI nicknameUI = playerInstance.GetComponentInChildren<PlayerNicknameUI>();
-            if (nicknameUI != null)
-            {
-                nicknameUI.Nickname.Value = playerDataToSpawn.Username;
-            }
+            nicknameUI.Nickname.Value = playerDataToSpawn.Username;
+            nicknameUI.Level.Value = playerDataToSpawn.Level; // <-- ASIGNAMOS EL NIVEL
         }
     }
 
@@ -203,6 +249,24 @@ public class GameManager : NetworkBehaviour
         if (impulseSource != null)
         {
             impulseSource.GenerateImpulse();
+        }
+    }
+
+    [Rpc(SendTo.Server)]
+    public void UpdatePlayerNameServerRpc(string newName, RpcParams rpcParams = default)
+    {
+        ulong clientId = rpcParams.Receive.SenderClientId;
+
+        for (int i = 0; i < PlayersInLobby.Count; i++)
+        {
+            if (PlayersInLobby[i].ClientId == clientId)
+            {
+                // Como PlayerData es un struct, debemos reemplazarlo, no modificarlo directamente
+                PlayerData updatedPlayer = PlayersInLobby[i];
+                updatedPlayer.Username = newName;
+                PlayersInLobby[i] = updatedPlayer;
+                break;
+            }
         }
     }
 }

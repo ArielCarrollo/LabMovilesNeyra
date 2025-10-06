@@ -18,13 +18,11 @@ public class UiGameManager : MonoBehaviour
     [SerializeField] private Button loginButton;
     [SerializeField] private Button goToRegisterButton;
 
-
     [Header("Registro UI")]
     [SerializeField] private TMP_InputField registerUsername;
     [SerializeField] private TMP_InputField registerPassword;
     [SerializeField] private Button registerButton;
     [SerializeField] private Button goToLoginButton;
-
 
     [Header("Managers")]
     [SerializeField] private LobbyUIManager lobbyUIManager;
@@ -36,12 +34,17 @@ public class UiGameManager : MonoBehaviour
 
     private void OnEnable()
     {
-        CloudAuthManager.Instance.OnSignInSuccess += HandleSignInSuccess;
-        CloudAuthManager.Instance.OnSignInFailed += HandleSignInFailed;
+        // Asegurarse de que la instancia exista antes de suscribirse
+        if (CloudAuthManager.Instance != null)
+        {
+            CloudAuthManager.Instance.OnSignInSuccess += HandleSignInSuccess;
+            CloudAuthManager.Instance.OnSignInFailed += HandleSignInFailed;
+        }
     }
 
     private void OnDisable()
     {
+        // Evitar errores si el objeto ya fue destruido
         if (CloudAuthManager.Instance != null)
         {
             CloudAuthManager.Instance.OnSignInSuccess -= HandleSignInSuccess;
@@ -61,7 +64,6 @@ public class UiGameManager : MonoBehaviour
             loginPanel.SetActive(true);
             registerPanel.SetActive(false);
         });
-
 
         loginPanel.SetActive(true);
         registerPanel.SetActive(false);
@@ -96,7 +98,15 @@ public class UiGameManager : MonoBehaviour
 
     private void HandleSignInSuccess()
     {
-        // Una vez autenticado, informamos al GameManager para que añada al jugador al lobby.
+        // Verificamos que el GameManager exista. Esto es crucial.
+        if (GameManager.Instance == null)
+        {
+            ShowError("Esperando al GameManager...");
+            // Podríamos reintentar después de un segundo
+            Invoke(nameof(HandleSignInSuccess), 1f);
+            return;
+        }
+
         string playerName = CloudAuthManager.Instance.GetPlayerName();
         GameManager.Instance.OnPlayerAuthenticatedServerRpc(playerName, NetworkManager.Singleton.LocalClientId);
     }
@@ -117,6 +127,8 @@ public class UiGameManager : MonoBehaviour
     {
         loginButton.interactable = isInteractable;
         registerButton.interactable = isInteractable;
+        goToLoginButton.interactable = isInteractable;
+        goToRegisterButton.interactable = isInteractable;
     }
 
     public void GoToLobby()

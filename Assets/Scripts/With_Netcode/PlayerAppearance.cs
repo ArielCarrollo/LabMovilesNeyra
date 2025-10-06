@@ -12,6 +12,7 @@ public class PlayerAppearance : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         PlayerCustomData.OnValueChanged += OnDataChanged;
+        // Al aparecer, aplicamos la apariencia con los datos que ya tiene la variable de red.
         ApplyAppearance(PlayerCustomData.Value);
     }
 
@@ -24,6 +25,11 @@ public class PlayerAppearance : NetworkBehaviour
     {
         ApplyAppearance(newValue);
     }
+
+    // --- CORRECCIÓN CLAVE ---
+    // El nombre del método público que actualiza la apariencia ya era 'ApplyAppearance'.
+    // Lo único que haremos es asegurarnos de que sea el que se llama desde fuera.
+    // Este método es usado tanto por la NetworkVariable como por el Lobby UI.
     public void ApplyAppearance(PlayerData data)
     {
         SetPartActive(bodiesParent, data.BodyIndex);

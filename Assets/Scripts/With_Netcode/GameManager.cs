@@ -64,26 +64,37 @@ public class GameManager : NetworkBehaviour
     {
         if (PlayersInLobby.Count >= MaxPlayers)
         {
-            NotifyClientOfFailureClientRpc("El lobby está lleno.", new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
+            // Construcción explícita de ClientRpcParams para evitar errores
+            var clientRpcParams = new ClientRpcParams
+            {
+                Send = new ClientRpcSendParams
+                {
+                    TargetClientIds = new ulong[] { clientId }
+                }
+            };
+            NotifyClientOfFailureClientRpc("El lobby está lleno.", clientRpcParams);
             return;
         }
 
-        // Opcional: Verificar si el jugador ya está en el lobby para evitar duplicados
         foreach (var player in PlayersInLobby)
         {
-            if (player.ClientId == clientId)
-            {
-                // El jugador ya está, no hacer nada o manejar reconexión.
-                return;
-            }
+            if (player.ClientId == clientId) return;
         }
 
         PlayerData loadedData = CloudAuthManager.Instance.LocalPlayerData;
-        loadedData.ClientId = clientId; // Asignamos el ClientId de la sesión actual
-        loadedData.Username = username; // Y el nombre de usuario
+        loadedData.ClientId = clientId;
+        loadedData.Username = username;
 
         PlayersInLobby.Add(loadedData);
-        LoginSuccessClientRpc(new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { clientId } } });
+
+        var successRpcParams = new ClientRpcParams
+        {
+            Send = new ClientRpcSendParams
+            {
+                TargetClientIds = new ulong[] { clientId }
+            }
+        };
+        LoginSuccessClientRpc(successRpcParams);
     }
 
     public int GetXpForLevel(int level)
@@ -99,22 +110,51 @@ public class GameManager : NetworkBehaviour
             if (PlayersInLobby[i].ClientId == playerId)
             {
                 PlayerData updatedData = PlayersInLobby[i];
-                updatedData.CurrentXP += amount;
+                bool leveledUp = false;
 
+                updatedData.CurrentXP += amount;
                 int xpNeeded = GetXpForLevel(updatedData.Level);
 
-                // Comprobar si sube de nivel (puede subir varios niveles de golpe)
                 while (updatedData.CurrentXP >= xpNeeded)
                 {
                     updatedData.Level++;
                     updatedData.CurrentXP -= xpNeeded;
                     xpNeeded = GetXpForLevel(updatedData.Level);
+                    leveledUp = true;
                 }
 
                 PlayersInLobby[i] = updatedData;
 
-                // --- Guardar progreso en la nube ---
-                SaveChangesToCloudClientRpc(updatedData, new ClientRpcParams { Send = new ClientRpcSendParams { TargetClientIds = new[] { playerId } } });
+                if (leveledUp)
+                {
+                    // Iteramos a través de TODOS los objetos que existen en la red.
+                    foreach (NetworkObject spawnedObject in NetworkManager.Singleton.SpawnManager.SpawnedObjects.Values)
+                    {
+                        // Buscamos el objeto que le pertenece al jugador que subió de nivel.
+                        if (spawnedObject.OwnerClientId == playerId)
+                        {
+                            // Nos aseguramos de que sea un personaje jugador (y no otro objeto).
+                            if (spawnedObject.TryGetComponent<SimplePlayerController>(out _))
+                            {
+                                // Obtenemos su UI y actualizamos el nivel.
+                                PlayerNicknameUI nicknameUI = spawnedObject.GetComponentInChildren<PlayerNicknameUI>();
+                                if (nicknameUI != null)
+
+                                {
+                                    nicknameUI.Level.Value = updatedData.Level;
+                                }
+                                // Encontramos al jugador, rompemos el bucle para no seguir buscando.
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                ClientRpcSendParams sendParams = new ClientRpcSendParams
+                {
+                    TargetClientIds = new ulong[] { playerId }
+                };
+                SaveChangesToCloudClientRpc(updatedData, new ClientRpcParams { Send = sendParams });
 
                 return;
             }

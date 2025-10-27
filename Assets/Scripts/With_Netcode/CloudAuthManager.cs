@@ -54,6 +54,7 @@ public class CloudAuthManager : MonoBehaviour
 
     public async Task SignUpWithUsernamePassword(string username, string password)
     {
+        SignOutIfSignedIn();
         await InitializeUnityServices();
         try
         {
@@ -107,6 +108,7 @@ public class CloudAuthManager : MonoBehaviour
     }
     public async Task SignInWithUsernamePassword(string username, string password)
     {
+        SignOutIfSignedIn();
         await InitializeUnityServices();
         try
         {
@@ -185,6 +187,17 @@ public class CloudAuthManager : MonoBehaviour
             Debug.LogError("Error al guardar el progreso del jugador: " + e);
         }
     }
+    public void SignOutIfSignedIn()
+    {
+        if (AuthenticationService.Instance.IsSignedIn)
+        {
+            AuthenticationService.Instance.SignOut();
+            playerId = null;
+            playerName = null;
+            Debug.Log("Auth: sesión anterior cerrada.");
+        }
+    }
+
     public void UpdateLocalData(PlayerData data)
     {
         LocalPlayerData = data;

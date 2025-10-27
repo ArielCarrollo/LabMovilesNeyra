@@ -11,6 +11,7 @@ public class UiGameManager : MonoBehaviour
     [SerializeField] private GameObject loginPanel;
     [SerializeField] private GameObject registerPanel;
     [SerializeField] private TextMeshProUGUI errorText;
+    [SerializeField] private GameObject lobbiesPanel;
 
     [Header("Login UI")]
     [SerializeField] private TMP_InputField loginUsername;
@@ -26,6 +27,9 @@ public class UiGameManager : MonoBehaviour
 
     [Header("Managers")]
     [SerializeField] private LobbyUIManager lobbyUIManager;
+
+
+
 
     private void Awake()
     {
@@ -68,6 +72,7 @@ public class UiGameManager : MonoBehaviour
         loginPanel.SetActive(true);
         registerPanel.SetActive(false);
         errorText.gameObject.SetActive(false);
+        if (lobbiesPanel) lobbiesPanel.SetActive(false);
     }
 
     private async void OnLoginClicked()
@@ -98,17 +103,10 @@ public class UiGameManager : MonoBehaviour
 
     private void HandleSignInSuccess()
     {
-        // Verificamos que el GameManager exista. Esto es crucial.
-        if (GameManager.Instance == null)
-        {
-            ShowError("Esperando al GameManager...");
-            // Podríamos reintentar después de un segundo
-            Invoke(nameof(HandleSignInSuccess), 1f);
-            return;
-        }
-
-        string playerName = CloudAuthManager.Instance.GetPlayerName();
-        GameManager.Instance.OnPlayerAuthenticatedServerRpc(playerName, NetworkManager.Singleton.LocalClientId);
+        loginPanel.SetActive(false);
+        registerPanel.SetActive(false);
+        errorText.gameObject.SetActive(false);
+        if (lobbiesPanel) lobbiesPanel.SetActive(true);
     }
 
     private void HandleSignInFailed(string message)
@@ -133,6 +131,7 @@ public class UiGameManager : MonoBehaviour
 
     public void GoToLobby()
     {
+        if (lobbiesPanel) lobbiesPanel.SetActive(false);
         loginPanel.SetActive(false);
         registerPanel.SetActive(false);
         errorText.gameObject.SetActive(false);

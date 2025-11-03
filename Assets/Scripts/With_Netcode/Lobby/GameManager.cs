@@ -41,6 +41,21 @@ public class GameManager : NetworkBehaviour
         }
         impulseSource = GetComponent<CinemachineImpulseSource>();
     }
+    private void OnDestroy()
+    {
+        // Muy importante: soltar la referencia estática
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+
+        // Por si quedó algo en memoria
+        if (PlayersInLobby != null)
+            PlayersInLobby.Clear();
+
+        if (clientLoadedLobbyUI != null)
+            clientLoadedLobbyUI.Clear();
+    }
 
     public override void OnNetworkSpawn()
     {
@@ -275,6 +290,7 @@ public class GameManager : NetworkBehaviour
         CloseLobbyOnClientRpc();
 
         NetworkManager.Singleton.Shutdown();
+        Destroy(gameObject);
     }
 
     [ClientRpc]
@@ -284,6 +300,7 @@ public class GameManager : NetworkBehaviour
         if (relay != null)
         {
             // vuelve al panel de selección
+            relay.ClearCurrentLobby();
             relay.ShowJoiningPanel();
         }
 

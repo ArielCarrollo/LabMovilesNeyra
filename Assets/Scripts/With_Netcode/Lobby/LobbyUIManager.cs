@@ -24,6 +24,11 @@ public class LobbyUIManager : MonoBehaviour
     [SerializeField] private GameObject playerCardPrefab;
     private Dictionary<ulong, GameObject> playerCardInstances = new Dictionary<ulong, GameObject>();
 
+    [Header("Chat")]
+    [SerializeField] private TMP_InputField chatInputField;
+    [SerializeField] private Transform chatMessagesContainer;
+    [SerializeField] private GameObject chatMessagePrefab;
+    [SerializeField] private ScrollRect chatScroll;
 
     [Header("Colors")]
     [SerializeField] private Color readyColor = Color.green;
@@ -111,7 +116,16 @@ public class LobbyUIManager : MonoBehaviour
                 GameManager.Instance.UpdatePlayerNameServerRpc(myName);
             }
         }
-
+        if (VivoxLobbyChatManager.Instance != null)
+        {
+            VivoxLobbyChatManager.Instance.OnTextMessage -= HandleChatMessage; // por si acaso
+            VivoxLobbyChatManager.Instance.OnTextMessage += HandleChatMessage;
+        }
+        if (chatInputField != null)
+        {
+            chatInputField.onSubmit?.RemoveAllListeners();
+            chatInputField.onEndEdit.AddListener(OnChatSubmit);
+        }
         // 4) 👉 y como la NetworkList puede llegar 1–2 frames después, refrescamos con un pequeño wait
         StartCoroutine(InitialListRefresh());
 
@@ -151,7 +165,10 @@ public class LobbyUIManager : MonoBehaviour
         {
             CloudAuthManager.Instance.OnPlayerNameUpdated -= HandlePlayerNameUpdated;
         }
-
+        if (VivoxLobbyChatManager.Instance != null)
+        {
+            VivoxLobbyChatManager.Instance.OnTextMessage -= HandleChatMessage;
+        }
         foreach (var card in playerCardInstances.Values)
         {
             Destroy(card);
@@ -477,5 +494,53 @@ public class LobbyUIManager : MonoBehaviour
             UiGameManager.Instance.GoToLobbySelection();
         }
     }
+    private void OnChatSubmit(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        SendChat(text);
+        chatInputField.text = string.Empty;
+        chatInputField.ActivateInputField();
+    }
+
+    private async void SendChat(string text)
+    {
+        if (VivoxLobbyChatManager.Instance != null)
+        {
+            await VivoxLobbyChatManager.Instance.SendTextMessage(text);
+        }
+        else
+        {
+            // fallback local, por si vivox no está
+            HandleChatMessage("Local", text, NetworkManager.Singleton.IsHost);
+        }
+    }
+
+    private void HandleChatMessage(string sender, string message, bool isHost)
+    {
+        if (chatMessagePrefab == null || chatMessagesContainer == null)
+        {
+            Debug.LogWarning("Chat UI no configurado en LobbyUIManager.");
+            return;
+        }
+
+        GameObject msgGO = Instantiate(chatMessagePrefab, chatMessagesContainer);
+        var txt = msgGO.GetComponentInChildren<TextMeshProUGUI>();
+        if (txt != null)
+        {
+            if (isHost)
+                txt.text = $"<b>{sender} [HOST]:</b> {message}";
+            else
+                txt.text = $"<b>{sender}:</b> {message}";
+        }
+
+        if (chatScroll != null)
+        {
+            Canvas.ForceUpdateCanvases();
+            chatScroll.verticalNormalizedPosition = 0f;
+        }
+    }
+
 
 }

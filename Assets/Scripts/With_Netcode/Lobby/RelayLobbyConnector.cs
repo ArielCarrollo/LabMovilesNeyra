@@ -169,6 +169,15 @@ public class RelayLobbyConnector : MonoBehaviour
 
             SetStatus($"Lobby creado! Código: {_currentLobby.LobbyCode}");
             if (joinCodeLabel) joinCodeLabel.text = $"Código: {_currentLobby.LobbyCode}";
+            if (VivoxLobbyChatManager.Instance != null)
+            {
+                string playerName = CloudAuthManager.Instance != null
+                    ? CloudAuthManager.Instance.GetPlayerName()
+                    : $"Player_{NetworkManager.Singleton.LocalClientId}";
+
+                await VivoxLobbyChatManager.Instance.LoginIfNeeded(playerName, true); // host = true
+                await VivoxLobbyChatManager.Instance.JoinLobbyChannel(_currentLobby.LobbyCode);
+            }
         }
         catch (Exception e)
         {
@@ -261,6 +270,16 @@ public class RelayLobbyConnector : MonoBehaviour
             );
 
             NetworkManager.Singleton.StartClient();
+            if (VivoxLobbyChatManager.Instance != null)
+            {
+                string playerName = CloudAuthManager.Instance != null
+                    ? CloudAuthManager.Instance.GetPlayerName()
+                    : $"Player_{Unity.Netcode.NetworkManager.Singleton.LocalClientId}";
+
+                // no soy host
+                await VivoxLobbyChatManager.Instance.LoginIfNeeded(playerName, false);
+                await VivoxLobbyChatManager.Instance.JoinLobbyChannel(lobby.LobbyCode);
+            }
         }
         catch (Exception e)
         {
@@ -426,19 +445,42 @@ public class RelayLobbyConnector : MonoBehaviour
 
 
 
-    private void HandleClientDisconnected(ulong clientId)
+    private async void HandleClientDisconnected(ulong clientId)
     {
+        // solo nos importa si el que se desconectó soy YO
         if (clientId == NetworkManager.Singleton.LocalClientId)
         {
+            // guarda el id antes de poner _currentLobby = null
+            string lobbyId = _currentLobby != null ? _currentLobby.Id : null;
+
+            // intentar salir también del servicio de lobbies
+            if (!string.IsNullOrEmpty(lobbyId))
+            {
+                try
+                {
+                    // esto quita al jugador del lobby en la nube
+                    await LobbyService.Instance.RemovePlayerAsync(
+                        lobbyId,
+                        AuthenticationService.Instance.PlayerId
+                    );
+                }
+                catch (LobbyServiceException e)
+                {
+                    Debug.LogWarning($"No se pudo remover al jugador del lobby en el servicio: {e.Message}");
+                }
+            }
+
             SetStatus("Desconectado.");
             _currentLobby = null;
             StopHeartbeat();
-            
+
             if (UiGameManager.Instance != null)
             {
                 if (rootLobbySelectionPanel) rootLobbySelectionPanel.SetActive(true);
                 ShowJoiningPanel();
             }
+            if (VivoxLobbyChatManager.Instance != null)
+                await VivoxLobbyChatManager.Instance.LeaveCurrentChannel();
         }
     }
 
@@ -498,6 +540,12 @@ private void StartHeartbeat()
                 yield break;
             }
         }
+    }
+    public void ClearCurrentLobby()
+    {
+        _currentLobby = null;
+        StopHeartbeat();
+        StopLobbyRefresh();
     }
 
     private static string GetConnType()

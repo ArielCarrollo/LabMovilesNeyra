@@ -1,12 +1,13 @@
-using UnityEngine;
-using Unity.Services.Authentication;
-using Unity.Services.Core;
+ï»¿using Newtonsoft.Json;
 using System;
-using System.Threading.Tasks;
-using Unity.Services.Core.Environments;
-using Newtonsoft.Json;
-using Unity.Services.CloudSave;
 using System.Collections.Generic;
+using System.Threading.Tasks;
+using Unity.Collections;
+using Unity.Services.Authentication;
+using Unity.Services.CloudSave;
+using Unity.Services.Core;
+using Unity.Services.Core.Environments;
+using UnityEngine;
 
 public class CloudAuthManager : MonoBehaviour
 {
@@ -79,14 +80,14 @@ public class CloudAuthManager : MonoBehaviour
         catch (RequestFailedException ex)
         {
             Debug.LogException(ex);
-            OnSignInFailed?.Invoke("Error de conexión. Inténtalo de nuevo.");
+            OnSignInFailed?.Invoke("Error de conexiÃ³n. IntÃ©ntalo de nuevo.");
         }
     }
     public async Task UpdatePlayerNameAsync(string newName)
     {
         if (string.IsNullOrWhiteSpace(newName))
         {
-            Debug.LogError("El nombre no puede estar vacío.");
+            Debug.LogError("El nombre no puede estar vacÃ­o.");
             return;
         }
 
@@ -119,18 +120,28 @@ public class CloudAuthManager : MonoBehaviour
 
             Debug.Log($"Sign In Successful. Player ID: {playerId}, Player Name: {playerName}");
             await LoadPlayerProgress();
+
+            // âœ… aquÃ­ sin "!= null"
+            if (LocalPlayerData.Username.Length == 0 && !string.IsNullOrWhiteSpace(playerName))
+            {
+                var tmp = LocalPlayerData;                                   // copiar struct
+                tmp.Username = new Unity.Collections.FixedString64Bytes(playerName);
+                UpdateLocalData(tmp);                                        // reasignar a la propiedad
+            }
+
             OnSignInSuccess?.Invoke();
         }
         catch (AuthenticationException)
         {
-            OnSignInFailed?.Invoke("Usuario o contraseña incorrectos.");
+            OnSignInFailed?.Invoke("Usuario o contraseÃ±a incorrectos.");
         }
         catch (RequestFailedException ex)
         {
             Debug.LogException(ex);
-            OnSignInFailed?.Invoke("Error de conexión. Inténtalo de nuevo.");
+            OnSignInFailed?.Invoke("Error de conexiÃ³n. IntÃ©ntalo de nuevo.");
         }
     }
+
 
     private string ConvertExceptionToMessage(AuthenticationException ex)
     {
@@ -138,11 +149,11 @@ public class CloudAuthManager : MonoBehaviour
         switch (ex.ErrorCode)
         {
             case 10200: // USERNAME_EXISTS
-                return "Este nombre de usuario ya está en uso.";
+                return "Este nombre de usuario ya estÃ¡ en uso.";
             case 10202: // INVALID_PASSWORD
-                return "La contraseña no es válida. Debe tener al menos 8 caracteres.";
+                return "La contraseÃ±a no es vÃ¡lida. Debe tener al menos 8 caracteres.";
             case 10203: // INVALID_USERNAME
-                return "El nombre de usuario no es válido.";
+                return "El nombre de usuario no es vÃ¡lido.";
             default:
                 return "Error desconocido en el registro.";
         }
@@ -151,27 +162,46 @@ public class CloudAuthManager : MonoBehaviour
     {
         try
         {
-            var serverData = await CloudSaveService.Instance.Data.Player.LoadAsync(new HashSet<string> { PLAYER_PROGRESS_KEY });
+            var serverData = await CloudSaveService.Instance.Data.Player
+                .LoadAsync(new HashSet<string> { PLAYER_PROGRESS_KEY });
 
             if (serverData.TryGetValue(PLAYER_PROGRESS_KEY, out var data))
             {
                 string jsonData = data.Value.GetAs<string>();
-                LocalPlayerData = JsonConvert.DeserializeObject<PlayerData>(jsonData);
+
+                // ðŸ‘‡ primero deserializamos a una variable normal
+                var loaded = JsonConvert.DeserializeObject<PlayerData>(jsonData);
                 Debug.Log("Datos del jugador cargados desde la nube.");
+
+                // ðŸ‘‡ si el JSON venÃ­a sin nombre, lo reinyectamos del Auth
+                string authName = GetPlayerName();
+                if (loaded.Username.Length == 0 && !string.IsNullOrWhiteSpace(authName))
+                {
+                    loaded.Username = new Unity.Collections.FixedString64Bytes(authName);
+                    Debug.Log($"CloudAuthManager: nombre reinyectado desde Auth: {authName}");
+                }
+
+                // ðŸ‘‡ AHORA sÃ­ lo guardo en la propiedad
+                LocalPlayerData = loaded;
             }
             else
             {
                 Debug.Log("No se encontraron datos en la nube. Creando datos locales por defecto.");
-                LocalPlayerData = new PlayerData(0, GetPlayerName()); 
-                await SavePlayerProgress(); 
+                string authName = GetPlayerName();
+                LocalPlayerData = new PlayerData(0,
+                    string.IsNullOrWhiteSpace(authName) ? "Player" : authName);
+                await SavePlayerProgress();
             }
         }
         catch (Exception e)
         {
             Debug.LogError("Error al cargar los datos del jugador: " + e);
-            LocalPlayerData = new PlayerData(0, GetPlayerName());
+            string authName = GetPlayerName();
+            LocalPlayerData = new PlayerData(0,
+                string.IsNullOrWhiteSpace(authName) ? "Player" : authName);
         }
     }
+
 
     public async Task SavePlayerProgress()
     {
@@ -194,7 +224,7 @@ public class CloudAuthManager : MonoBehaviour
             AuthenticationService.Instance.SignOut();
             playerId = null;
             playerName = null;
-            Debug.Log("Auth: sesión anterior cerrada.");
+            Debug.Log("Auth: sesiÃ³n anterior cerrada.");
         }
     }
 

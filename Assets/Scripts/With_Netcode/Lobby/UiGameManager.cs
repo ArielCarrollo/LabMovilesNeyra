@@ -11,8 +11,8 @@ public class UiGameManager : MonoBehaviour
     [SerializeField] private GameObject loginPanel;
     [SerializeField] private GameObject registerPanel;
     [SerializeField] private TextMeshProUGUI errorText;
+    [SerializeField] private GameObject lobbySelectionPanel;
     [SerializeField] private GameObject lobbiesPanel;
-
     [Header("Login UI")]
     [SerializeField] private TMP_InputField loginUsername;
     [SerializeField] private TMP_InputField loginPassword;
@@ -72,6 +72,7 @@ public class UiGameManager : MonoBehaviour
         loginPanel.SetActive(true);
         registerPanel.SetActive(false);
         errorText.gameObject.SetActive(false);
+        if (lobbySelectionPanel) lobbySelectionPanel.SetActive(false);
         if (lobbiesPanel) lobbiesPanel.SetActive(false);
     }
 
@@ -106,7 +107,7 @@ public class UiGameManager : MonoBehaviour
         loginPanel.SetActive(false);
         registerPanel.SetActive(false);
         errorText.gameObject.SetActive(false);
-        if (lobbiesPanel) lobbiesPanel.SetActive(true);
+        if (lobbySelectionPanel) lobbySelectionPanel.SetActive(true);
     }
 
     private void HandleSignInFailed(string message)
@@ -131,10 +132,20 @@ public class UiGameManager : MonoBehaviour
 
     public void GoToLobby()
     {
-        if (lobbiesPanel) lobbiesPanel.SetActive(false);
+        if (lobbiesPanel) lobbiesPanel.SetActive(true); 
+        if (lobbySelectionPanel) lobbySelectionPanel.SetActive(false);
         loginPanel.SetActive(false);
         registerPanel.SetActive(false);
         errorText.gameObject.SetActive(false);
         lobbyUIManager.Initialize();
     }
+    public void GoToLobbySelection()
+    {
+        if (lobbiesPanel) lobbiesPanel.SetActive(false);
+        if (lobbySelectionPanel) lobbySelectionPanel.SetActive(true);
+        loginPanel.SetActive(false);
+        registerPanel.SetActive(false);
+        errorText.gameObject.SetActive(false);
+    }
+
 }

@@ -51,7 +51,7 @@ public class EnemyAI : NetworkBehaviour
         if (CurrentHealth.Value <= 0)
         {
             // --- Otorgar XP al atacante ---
-            GameManager.Instance.AwardExperienceServerRpc(attackerId, xpValue);
+            //GameManager.Instance.AwardExperienceServerRpc(attackerId, xpValue);
 
             if (gameObject != null && IsSpawned)
             {

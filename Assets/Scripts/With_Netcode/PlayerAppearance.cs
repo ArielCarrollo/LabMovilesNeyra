@@ -9,11 +9,20 @@ public class PlayerAppearance : NetworkBehaviour
 
     public readonly NetworkVariable<PlayerData> PlayerCustomData = new NetworkVariable<PlayerData>();
 
+    // --- CORRECCIÓN: Métodos públicos para obtener los contadores ---
+    public int GetBodyCount() => bodiesParent != null ? bodiesParent.childCount : 0;
+    public int GetEyesCount() => eyesParent != null ? eyesParent.childCount : 0;
+    public int GetGlovesCount() => glovesParent != null ? glovesParent.childCount : 0;
+    // --- Fin de la Corrección ---
+
     public override void OnNetworkSpawn()
     {
         PlayerCustomData.OnValueChanged += OnDataChanged;
         // Al aparecer, aplicamos la apariencia con los datos que ya tiene la variable de red.
-        ApplyAppearance(PlayerCustomData.Value);
+        if (PlayerCustomData.Value.Username.Length > 0) // Comprobar si el struct tiene datos válidos
+        {
+            ApplyAppearance(PlayerCustomData.Value);
+        }
     }
 
     public override void OnNetworkDespawn()
@@ -26,10 +35,6 @@ public class PlayerAppearance : NetworkBehaviour
         ApplyAppearance(newValue);
     }
 
-    // --- CORRECCIÓN CLAVE ---
-    // El nombre del método público que actualiza la apariencia ya era 'ApplyAppearance'.
-    // Lo único que haremos es asegurarnos de que sea el que se llama desde fuera.
-    // Este método es usado tanto por la NetworkVariable como por el Lobby UI.
     public void ApplyAppearance(PlayerData data)
     {
         SetPartActive(bodiesParent, data.BodyIndex);
@@ -40,6 +45,14 @@ public class PlayerAppearance : NetworkBehaviour
     private void SetPartActive(Transform parent, int index)
     {
         if (parent == null) return;
+
+        // Asegurarse de que el índice esté dentro de los límites
+        if (index < 0 || index >= parent.childCount)
+        {
+            // Si el índice es inválido, desactivar todo o activar el primero (default)
+            index = 0;
+            if (parent.childCount == 0) return; // No hay hijos, no hacer nada
+        }
 
         for (int i = 0; i < parent.childCount; i++)
         {

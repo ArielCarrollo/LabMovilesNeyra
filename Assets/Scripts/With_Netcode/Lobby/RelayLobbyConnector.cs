@@ -43,7 +43,8 @@ public class RelayLobbyConnector : MonoBehaviour
     
     private Task _lobbyRefreshTask;
     private bool _isRefreshingLobbies = false;
-    private const float LOBBY_REFRESH_INTERVAL = 5.0f; 
+    private const float LOBBY_REFRESH_INTERVAL = 5.0f;
+    public Lobby CurrentLobby => _currentLobby;
 
     [Header("General UI")]
     [SerializeField] private TextMeshProUGUI statusText;

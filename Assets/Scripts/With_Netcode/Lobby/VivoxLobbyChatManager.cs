@@ -1,16 +1,19 @@
 ﻿using System;
+using System.Threading.Tasks;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
 using Unity.Services.Vivox;
 using UnityEngine;
-using System.Threading.Tasks;
 
 public class VivoxLobbyChatManager : MonoBehaviour
 {
     public static VivoxLobbyChatManager Instance { get; private set; }
 
-    // sender, message, isHost
+    // público (canal de lobby)
     public event Action<string, string, bool> OnTextMessage;
+
+    // privado (DM): senderName, senderPlayerId, message
+    public event Action<string, string, string> OnDirectMessage;
 
     private string currentChannelName;
     private bool isLoggedIn;
@@ -29,7 +32,6 @@ public class VivoxLobbyChatManager : MonoBehaviour
             return;
         }
 
-        // Por si tu bootstrap de servicios aún no corrió
         if (UnityServices.State == ServicesInitializationState.Uninitialized)
         {
             await UnityServices.InitializeAsync();
@@ -49,7 +51,6 @@ public class VivoxLobbyChatManager : MonoBehaviour
         if (isLoggedIn)
             return;
 
-        // 👇 aquí va LoginOptions, no un string
         var options = new LoginOptions
         {
             DisplayName = displayName
@@ -58,9 +59,12 @@ public class VivoxLobbyChatManager : MonoBehaviour
         await VivoxService.Instance.LoginAsync(options);
         isLoggedIn = true;
 
-        // Suscribirse a los mensajes de canal
         VivoxService.Instance.ChannelMessageReceived -= OnChannelMessageReceived;
         VivoxService.Instance.ChannelMessageReceived += OnChannelMessageReceived;
+
+        // 👇 esto es para DMs
+        VivoxService.Instance.DirectedMessageReceived -= OnDirectedMessageReceived;
+        VivoxService.Instance.DirectedMessageReceived += OnDirectedMessageReceived;
     }
 
     private void OnChannelMessageReceived(VivoxMessage msg)
@@ -72,10 +76,19 @@ public class VivoxLobbyChatManager : MonoBehaviour
         if (!string.IsNullOrEmpty(text) && text.StartsWith("[HOST] "))
         {
             isHost = true;
-            text = text.Substring(7); // quitar "[HOST] "
+            text = text.Substring(7);
         }
 
         OnTextMessage?.Invoke(sender, text, isHost);
+    }
+
+    private void OnDirectedMessageReceived(VivoxMessage msg)
+    {
+        string senderName = msg.SenderDisplayName;
+        string senderPlayerId = msg.SenderPlayerId; // viene del Vivox/UGS
+        string text = msg.MessageText;
+
+        OnDirectMessage?.Invoke(senderName, senderPlayerId, text);
     }
 
     public async Task JoinLobbyChannel(string lobbyCodeOrId)
@@ -88,11 +101,10 @@ public class VivoxLobbyChatManager : MonoBehaviour
 
         currentChannelName = $"lobby-{lobbyCodeOrId}";
 
-        // Canal de grupo con texto
         await VivoxService.Instance.JoinGroupChannelAsync(
             currentChannelName,
             ChatCapability.TextOnly
-        );  // puedes pasar ChannelOptions si quieres algo más
+        );
 
         Debug.Log($"VivoxChat: unido al canal {currentChannelName}");
     }
@@ -112,17 +124,27 @@ public class VivoxLobbyChatManager : MonoBehaviour
             return;
 
         string finalMsg = iAmHost ? $"[HOST] {message}" : message;
-
-        // 👇 este es el nombre correcto del método
         await VivoxService.Instance.SendChannelTextMessageAsync(currentChannelName, finalMsg);
+    }
+
+    // 👇 NUEVO: enviar DM a otro jugador por su playerId (el del Lobby/UGS)
+    public async Task SendDirectMessage(string targetPlayerId, string message)
+    {
+        if (!isLoggedIn)
+        {
+            Debug.LogWarning("VivoxChat: intenta DM sin login.");
+            return;
+        }
+
+        await VivoxService.Instance.SendDirectTextMessageAsync(targetPlayerId, message);
     }
 
     private async void OnDestroy()
     {
         if (Instance == this)
         {
-            // desuscribir
             VivoxService.Instance.ChannelMessageReceived -= OnChannelMessageReceived;
+            VivoxService.Instance.DirectedMessageReceived -= OnDirectedMessageReceived;
 
             if (!string.IsNullOrEmpty(currentChannelName))
                 await LeaveCurrentChannel();

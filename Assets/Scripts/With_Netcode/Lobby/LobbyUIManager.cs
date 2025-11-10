@@ -5,6 +5,9 @@ using Unity.Collections;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
+using Unity.Services.Authentication;
+using Unity.Services.Lobbies;
+using Unity.Services.Lobbies.Models;
 
 public class LobbyUIManager : MonoBehaviour
 {
@@ -15,7 +18,8 @@ public class LobbyUIManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI readyButtonText;
     [SerializeField] private TextMeshProUGUI statusText;
     [SerializeField] private TextMeshProUGUI readyCountText;
-    [SerializeField] private TextMeshProUGUI lobbyCodeText; // Para mostrar el código
+    [SerializeField] private TextMeshProUGUI lobbyCodeText;
+
     [Header("Host Controls")]
     [SerializeField] private Button closeLobbyButton;
 
@@ -24,11 +28,21 @@ public class LobbyUIManager : MonoBehaviour
     [SerializeField] private GameObject playerCardPrefab;
     private Dictionary<ulong, GameObject> playerCardInstances = new Dictionary<ulong, GameObject>();
 
-    [Header("Chat")]
+    [Header("Chat (público)")]
+    [SerializeField] private GameObject publicChatPanel;
     [SerializeField] private TMP_InputField chatInputField;
     [SerializeField] private Transform chatMessagesContainer;
     [SerializeField] private GameObject chatMessagePrefab;
     [SerializeField] private ScrollRect chatScroll;
+
+    [Header("Chat privado")]
+    [SerializeField] private GameObject privateChatPanel;
+    [SerializeField] private Transform privatePlayersContainer;
+    [SerializeField] private GameObject privatePlayerButtonPrefab;
+    [SerializeField] private Transform privateMessagesContainer;
+    [SerializeField] private GameObject privateMessagePrefab;
+    [SerializeField] private TMP_InputField privateChatInputField;
+    [SerializeField] private Color privateUnreadColor = Color.yellow;
 
     [Header("Colors")]
     [SerializeField] private Color readyColor = Color.green;
@@ -44,7 +58,6 @@ public class LobbyUIManager : MonoBehaviour
     [SerializeField] private Button prevGlovesButton;
     private PlayerData localCustomData;
 
-
     [Header("Player Name Management")]
     [SerializeField] private TextMeshProUGUI playerNameText;
     [SerializeField] private TMP_InputField nameChangeInputField;
@@ -53,16 +66,49 @@ public class LobbyUIManager : MonoBehaviour
     [Header("Player Progression")]
     [SerializeField] private TextMeshProUGUI levelText;
     [SerializeField] private Slider xpBar;
-    
+
     private bool isInitialized = false;
 
-    // --- Inicialización y Suscripciones ---
+    // ---- Estructuras de chat ----
+    // público
+    [System.Serializable]
+    private class PublicChatMessage
+    {
+        public string sender;
+        public string text;
+        public bool isHost;
+    }
+    private List<PublicChatMessage> publicChatHistory = new List<PublicChatMessage>();
+
+    // privado
+    private class PrivateEntry
+    {
+        public string playerId;        // id de Unity Services (para DM real)
+        public ulong clientId;         // para fallback desde GameManager
+        public GameObject go;
+        public Image bg;
+        public bool hasUnread;
+        public Color baseColor;
+        public string displayName;
+    }
+    private Dictionary<string, PrivateEntry> privateEntries = new Dictionary<string, PrivateEntry>();
+
+    [System.Serializable]
+    private class PrivateChatMessage
+    {
+        public string sender;
+        public string text;
+    }
+    // clave: "pid:<playerId>" o "cid:<clientId>"
+    private Dictionary<string, List<PrivateChatMessage>> privateChatHistory = new Dictionary<string, List<PrivateChatMessage>>();
+
+    // canal privado abierto actualmente
+    private string currentPrivateTargetPlayerId = null;
+    private ulong currentPrivateTargetClientId = 0;
 
     public void Initialize()
     {
         if (isInitialized) return;
-
-        Debug.Log("LobbyUIManager: Inicializando.");
 
         lobbyPanel.SetActive(true);
 
@@ -72,12 +118,10 @@ public class LobbyUIManager : MonoBehaviour
         }
         else
         {
-            Debug.LogError("GameManager o PlayersInLobby es nulo durante la inicialización.");
             statusText.text = "Error al conectar con GameManager.";
             return;
         }
 
-        // botones
         startGameButton.onClick.AddListener(OnStartGameClicked);
         readyButton.onClick.AddListener(OnReadyClicked);
         saveNameButton.onClick.AddListener(OnSaveNameClicked);
@@ -88,6 +132,7 @@ public class LobbyUIManager : MonoBehaviour
         prevEyesButton.onClick.AddListener(() => OnChangeAppearance(1, -1));
         nextGlovesButton.onClick.AddListener(() => OnChangeAppearance(2, 1));
         prevGlovesButton.onClick.AddListener(() => OnChangeAppearance(2, -1));
+
         if (closeLobbyButton != null)
         {
             bool iAmHost = NetworkManager.Singleton.IsHost;
@@ -95,47 +140,53 @@ public class LobbyUIManager : MonoBehaviour
             if (iAmHost)
                 closeLobbyButton.onClick.AddListener(OnCloseLobbyClicked);
         }
+
         if (CloudAuthManager.Instance != null)
         {
             CloudAuthManager.Instance.OnPlayerNameUpdated += HandlePlayerNameUpdated;
         }
 
-        // 1) leer lo que tenemos del auth / cloud
-        LoadLocalPlayerData();  // aquí puede venir “bien” pero el server quizá guardó vacío
-
-        // 2) marcamos como listo
+        LoadLocalPlayerData();
         isInitialized = true;
 
-        // 3) 👉 forzar al SERVER a tener este nombre (esto es lo que te faltaba)
         if (GameManager.Instance != null)
         {
             string myName = localCustomData.Username.ToString();
             if (!string.IsNullOrWhiteSpace(myName))
             {
-                // esto escribe de nuevo en la NetworkList del server
                 GameManager.Instance.UpdatePlayerNameServerRpc(myName);
             }
         }
+
+        // enganchar chat vivox
         if (VivoxLobbyChatManager.Instance != null)
         {
-            VivoxLobbyChatManager.Instance.OnTextMessage -= HandleChatMessage; // por si acaso
+            VivoxLobbyChatManager.Instance.OnTextMessage -= HandleChatMessage;
             VivoxLobbyChatManager.Instance.OnTextMessage += HandleChatMessage;
+
+            VivoxLobbyChatManager.Instance.OnDirectMessage -= HandleDirectMessage;
+            VivoxLobbyChatManager.Instance.OnDirectMessage += HandleDirectMessage;
         }
+
         if (chatInputField != null)
         {
             chatInputField.onSubmit?.RemoveAllListeners();
             chatInputField.onEndEdit.AddListener(OnChatSubmit);
         }
-        // 4) 👉 y como la NetworkList puede llegar 1–2 frames después, refrescamos con un pequeño wait
-        StartCoroutine(InitialListRefresh());
 
-        Debug.Log("LobbyUIManager: Inicialización completa.");
+        if (privateChatInputField != null)
+        {
+            privateChatInputField.onSubmit?.RemoveAllListeners();
+            privateChatInputField.onEndEdit.AddListener(OnPrivateChatSubmit);
+        }
+
+        ShowPublicChatPanel(); // al entrar pintamos el historial público
+        StartCoroutine(InitialListRefresh());
     }
 
     private IEnumerator InitialListRefresh()
     {
         float timeout = 2.5f;
-        // esperamos a que el cliente YA tenga los datos que el server metió en la NetworkList
         while (timeout > 0f)
         {
             if (GameManager.Instance != null &&
@@ -149,10 +200,8 @@ public class LobbyUIManager : MonoBehaviour
             yield return null;
         }
 
-        // último intento aunque siga vacía
         HandlePlayerListChanged(new NetworkListEvent<PlayerData>());
     }
-
 
     private void OnDisable()
     {
@@ -160,31 +209,49 @@ public class LobbyUIManager : MonoBehaviour
         {
             GameManager.Instance.PlayersInLobby.OnListChanged -= HandlePlayerListChanged;
         }
-        
+
         if (CloudAuthManager.Instance != null)
         {
             CloudAuthManager.Instance.OnPlayerNameUpdated -= HandlePlayerNameUpdated;
         }
+
         if (VivoxLobbyChatManager.Instance != null)
         {
             VivoxLobbyChatManager.Instance.OnTextMessage -= HandleChatMessage;
+            VivoxLobbyChatManager.Instance.OnDirectMessage -= HandleDirectMessage;
         }
+
         foreach (var card in playerCardInstances.Values)
         {
             Destroy(card);
         }
         playerCardInstances.Clear();
-        
-        isInitialized = false; 
+        privateEntries.Clear();
+
+        isInitialized = false;
     }
 
-    // --- Carga de Datos y Sincronización de UI ---
+    private void Update()
+    {
+        // parpadeo de los que tienen mensajes sin leer
+        if (privateEntries.Count > 0 && privatePlayersContainer != null && privateChatPanel != null && privateChatPanel.activeSelf)
+        {
+            float t = Mathf.PingPong(Time.unscaledTime * 3.5f, 1f);
+            foreach (var kvp in privateEntries)
+            {
+                var entry = kvp.Value;
+                if (entry.hasUnread && entry.bg != null)
+                {
+                    entry.bg.color = Color.Lerp(entry.baseColor, privateUnreadColor, t);
+                }
+            }
+        }
+    }
 
     private void LoadLocalPlayerData()
     {
         if (CloudAuthManager.Instance == null)
         {
-            Debug.LogError("CloudAuthManager no tiene datos de jugador local.");
             localCustomData = new PlayerData(0, "Jugador");
             UpdateNameAndLevelUI(localCustomData);
             return;
@@ -192,7 +259,6 @@ public class LobbyUIManager : MonoBehaviour
 
         localCustomData = CloudAuthManager.Instance.LocalPlayerData;
 
-        // 👇 si vino vacío por la carga del JSON, usemos el nombre real del Auth
         if (localCustomData.Username.Length == 0)
         {
             string authName = CloudAuthManager.Instance.GetPlayerName();
@@ -211,25 +277,19 @@ public class LobbyUIManager : MonoBehaviour
         }
     }
 
-
     private void HandlePlayerListChanged(NetworkListEvent<PlayerData> changeEvent)
     {
         if (GameManager.Instance == null || !isInitialized)
-        {
-            if (!isInitialized) Debug.LogWarning("HandlePlayerListChanged llamado antes de inicializar.");
             return;
-        }
 
-        Debug.Log("LobbyUIManager: Actualizando lista de jugadores...");
-
-        // 1. recolectar ids actuales
+        // ids actuales
         List<ulong> currentIds = new List<ulong>();
         foreach (var player in GameManager.Instance.PlayersInLobby)
         {
             currentIds.Add(player.ClientId);
         }
 
-        // 2. borrar los que ya no están
+        // limpiar los que ya no están
         List<ulong> idsToRemove = new List<ulong>();
         foreach (var kvp in playerCardInstances)
         {
@@ -242,7 +302,6 @@ public class LobbyUIManager : MonoBehaviour
         foreach (var id in idsToRemove)
             playerCardInstances.Remove(id);
 
-        // 3. volver a crear / actualizar
         int readyCount = 0;
         bool localPlayerFound = false;
         ulong localClientId = NetworkManager.Singleton.LocalClientId;
@@ -250,10 +309,8 @@ public class LobbyUIManager : MonoBehaviour
 
         foreach (var player in GameManager.Instance.PlayersInLobby)
         {
-            // crear card si no existe
             if (!playerCardInstances.TryGetValue(player.ClientId, out var cardInstance))
             {
-                // ✅ usar el que SÍ tienes en el inspector
                 cardInstance = Instantiate(playerCardPrefab, playerListContent);
                 playerCardInstances[player.ClientId] = cardInstance;
             }
@@ -268,7 +325,6 @@ public class LobbyUIManager : MonoBehaviour
                 localPlayerFound = true;
                 localPlayerData = player;
 
-                // solo si el server sí nos mandó nombre
                 if (player.Username.Length > 0)
                 {
                     localCustomData = player;
@@ -277,16 +333,20 @@ public class LobbyUIManager : MonoBehaviour
             }
         }
 
-
         UpdateLobbyControls(localPlayerData, readyCount, localPlayerFound);
-    }
 
+        // si estamos viendo los privados, refrescamos la lista
+        if (privateChatPanel != null && privateChatPanel.activeSelf)
+        {
+            RefreshPrivatePlayersList();
+        }
+    }
 
     private string SanitizeName(FixedString64Bytes fs, ulong clientId)
     {
         string s = fs.ToString();
         if (!string.IsNullOrEmpty(s))
-            s = s.Replace("\0", string.Empty);   // 👈 quitar nulos
+            s = s.Replace("\0", string.Empty);
 
         if (string.IsNullOrWhiteSpace(s))
             s = $"Player_{clientId}";
@@ -296,7 +356,6 @@ public class LobbyUIManager : MonoBehaviour
 
     private void UpdatePlayerCard(GameObject cardInstance, PlayerData player)
     {
-        // 1. nombre (como ya lo tenías)
         TextMeshProUGUI nameText = cardInstance.transform
             .Find("PlayerNameText")?.GetComponent<TextMeshProUGUI>();
 
@@ -308,17 +367,14 @@ public class LobbyUIManager : MonoBehaviour
         if (nameText != null)
             nameText.text = nick;
 
-        // 2. color ready
         var panelImage = cardInstance.GetComponent<Image>();
         if (panelImage != null)
             panelImage.color = player.IsReady ? readyColor : notReadyColor;
 
-        // 3. icono de host
         var hostIcon = cardInstance.transform.Find("HostIcon")?.gameObject;
         if (hostIcon != null)
             hostIcon.SetActive(player.ClientId == NetworkManager.ServerClientId);
 
-        // 4. 🟡 BOTÓN KICK (solo host, y no sobre el host)
         var kickBtnTransform = cardInstance.transform.Find("KickButton");
         if (kickBtnTransform != null)
         {
@@ -328,10 +384,7 @@ public class LobbyUIManager : MonoBehaviour
                 bool iAmHost = NetworkManager.Singleton.IsHost;
                 bool isThisTheHost = (player.ClientId == NetworkManager.ServerClientId);
 
-                // mostrar solo si soy host y no es el host
                 kickBtn.gameObject.SetActive(iAmHost && !isThisTheHost);
-
-                // limpiar listeners anteriores, porque reutilizas las cards
                 kickBtn.onClick.RemoveAllListeners();
 
                 if (iAmHost && !isThisTheHost)
@@ -343,13 +396,10 @@ public class LobbyUIManager : MonoBehaviour
         }
     }
 
-
-
-
     private void UpdateLobbyControls(PlayerData localPlayer, int readyCount, bool localPlayerFound)
     {
         if (GameManager.Instance == null) return;
-        
+
         bool allPlayersReady = (readyCount == GameManager.Instance.PlayersInLobby.Count) && (GameManager.Instance.PlayersInLobby.Count > 0);
 
         readyCountText.text = $"{readyCount} / {GameManager.Instance.PlayersInLobby.Count}";
@@ -360,12 +410,13 @@ public class LobbyUIManager : MonoBehaviour
         }
         else
         {
-            readyButtonText.text = "Listo"; 
+            readyButtonText.text = "Listo";
         }
-        
+
         startGameButton.gameObject.SetActive(NetworkManager.Singleton.IsHost);
         startGameButton.interactable = allPlayersReady;
     }
+
     private void UpdateNameAndLevelUI(PlayerData data)
     {
         string nick = SanitizeName(data.Username,
@@ -381,9 +432,6 @@ public class LobbyUIManager : MonoBehaviour
         xpBar.maxValue = xpNeededForNextLevel;
         xpBar.value = data.CurrentXP;
     }
-
-
-    // --- Handlers de Eventos de UI ---
 
     private void OnStartGameClicked()
     {
@@ -425,37 +473,34 @@ public class LobbyUIManager : MonoBehaviour
         localCustomData.Username = new FixedString64Bytes(newName);
         CloudAuthManager.Instance.UpdateLocalData(localCustomData);
     }
-    
-    // --- Lógica de Personalización ---
 
     private void OnChangeAppearance(int type, int direction)
     {
         if (previewPlayer == null) return;
-        
-        // (Asegúrate de que PlayerAppearance tenga estos métodos públicos Get...Count)
+
         int maxBody = previewPlayer.GetBodyCount();
         int maxEyes = previewPlayer.GetEyesCount();
         int maxGloves = previewPlayer.GetGlovesCount();
-        
+
         if (maxBody == 0 && type == 0) return;
         if (maxEyes == 0 && type == 1) return;
         if (maxGloves == 0 && type == 2) return;
 
         switch (type)
         {
-            case 0: // Body
+            case 0:
                 localCustomData.BodyIndex = (localCustomData.BodyIndex + direction + maxBody) % maxBody;
                 break;
-            case 1: // Eyes
+            case 1:
                 localCustomData.EyesIndex = (localCustomData.EyesIndex + direction + maxEyes) % maxEyes;
                 break;
-            case 2: // Gloves
+            case 2:
                 localCustomData.GlovesIndex = (localCustomData.GlovesIndex + direction + maxGloves) % maxGloves;
                 break;
         }
-        
+
         previewPlayer.ApplyAppearance(localCustomData);
-        
+
         if (GameManager.Instance != null)
         {
             GameManager.Instance.UpdatePlayerAppearanceServerRpc(localCustomData);
@@ -464,9 +509,10 @@ public class LobbyUIManager : MonoBehaviour
         if (CloudAuthManager.Instance != null)
         {
             CloudAuthManager.Instance.UpdateLocalData(localCustomData);
-            _ = CloudAuthManager.Instance.SavePlayerProgress(); 
+            _ = CloudAuthManager.Instance.SavePlayerProgress();
         }
     }
+
     private void OnKickPlayerClicked(ulong targetClientId)
     {
         if (GameManager.Instance == null) return;
@@ -474,6 +520,7 @@ public class LobbyUIManager : MonoBehaviour
 
         GameManager.Instance.KickPlayerServerRpc(targetClientId);
     }
+
     private void OnCloseLobbyClicked()
     {
         if (!NetworkManager.Singleton.IsHost) return;
@@ -482,7 +529,6 @@ public class LobbyUIManager : MonoBehaviour
             GameManager.Instance.CloseLobbyServerRpc();
         }
 
-        // UI local del host (por si el RPC tarda un frame)
         var relay = FindObjectOfType<RelayLobbyConnector>();
         if (relay != null)
         {
@@ -494,6 +540,11 @@ public class LobbyUIManager : MonoBehaviour
             UiGameManager.Instance.GoToLobbySelection();
         }
     }
+
+    // =====================================================================
+    // -------------------------- CHAT PÚBLICO ------------------------------
+    // =====================================================================
+
     private void OnChatSubmit(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
@@ -512,18 +563,29 @@ public class LobbyUIManager : MonoBehaviour
         }
         else
         {
-            // fallback local, por si vivox no está
             HandleChatMessage("Local", text, NetworkManager.Singleton.IsHost);
         }
     }
 
     private void HandleChatMessage(string sender, string message, bool isHost)
     {
-        if (chatMessagePrefab == null || chatMessagesContainer == null)
+        // 1) guardamos en historial
+        publicChatHistory.Add(new PublicChatMessage
         {
-            Debug.LogWarning("Chat UI no configurado en LobbyUIManager.");
+            sender = sender,
+            text = message,
+            isHost = isHost
+        });
+
+        // 2) y también lo pintamos si estamos en el chat público
+        if (publicChatPanel != null && publicChatPanel.activeSelf)
+            AddPublicMessageToUI(sender, message, isHost);
+    }
+
+    private void AddPublicMessageToUI(string sender, string message, bool isHost)
+    {
+        if (chatMessagePrefab == null || chatMessagesContainer == null)
             return;
-        }
 
         GameObject msgGO = Instantiate(chatMessagePrefab, chatMessagesContainer);
         var txt = msgGO.GetComponentInChildren<TextMeshProUGUI>();
@@ -542,5 +604,372 @@ public class LobbyUIManager : MonoBehaviour
         }
     }
 
+    private void RenderPublicChatHistory()
+    {
+        if (chatMessagesContainer == null) return;
 
+        foreach (Transform child in chatMessagesContainer)
+            Destroy(child.gameObject);
+
+        foreach (var m in publicChatHistory)
+            AddPublicMessageToUI(m.sender, m.text, m.isHost);
+    }
+
+    public void ShowPublicChatPanel()
+    {
+        if (publicChatPanel) publicChatPanel.SetActive(true);
+        if (privateChatPanel) privateChatPanel.SetActive(false);
+
+        // repintar historial público
+        RenderPublicChatHistory();
+    }
+
+    // =====================================================================
+    // -------------------------- CHAT PRIVADO ------------------------------
+    // =====================================================================
+
+    public void ShowPrivateChatPanel()
+    {
+        if (publicChatPanel) publicChatPanel.SetActive(false);
+        if (privateChatPanel) privateChatPanel.SetActive(true);
+
+        RefreshPrivatePlayersList();
+    }
+
+    // Esto ahora es una corrutina en tu versión actual
+    private void RefreshPrivatePlayersList()
+    {
+        StartCoroutine(DoRefreshPrivatePlayersList());
+    }
+
+    private IEnumerator DoRefreshPrivatePlayersList()
+    {
+        if (privatePlayersContainer == null)
+            yield break;
+
+        foreach (Transform child in privatePlayersContainer)
+            Destroy(child.gameObject);
+        privateEntries.Clear();
+
+        var relay = FindObjectOfType<RelayLobbyConnector>();
+        Lobby lobby = null;
+
+        if (relay != null && relay.CurrentLobby != null)
+        {
+            var task = LobbyService.Instance.GetLobbyAsync(relay.CurrentLobby.Id);
+            yield return new WaitUntil(() => task.IsCompleted);
+
+            if (!task.IsFaulted && task.Result != null)
+            {
+                lobby = task.Result;
+            }
+            else
+            {
+                lobby = relay.CurrentLobby;
+            }
+        }
+
+        // mi id
+        string myPlayerId = null;
+        if (CloudAuthManager.Instance != null)
+            myPlayerId = CloudAuthManager.Instance.GetPlayerId();
+        else if (AuthenticationService.Instance != null && AuthenticationService.Instance.IsSignedIn)
+            myPlayerId = AuthenticationService.Instance.PlayerId;
+
+        if (privatePlayerButtonPrefab == null)
+        {
+            Debug.LogWarning("[LobbyUI] privatePlayerButtonPrefab no asignado.");
+            yield break;
+        }
+
+        bool filledFromLobby = false;
+
+        if (lobby != null && lobby.Players != null && lobby.Players.Count > 1)
+        {
+            Debug.Log($"[LobbyUI] Refrescando privados desde LOBBY (fresco). Jugadores en lobby: {lobby.Players.Count}");
+            foreach (var p in lobby.Players)
+            {
+                if (p == null) continue;
+                if (!string.IsNullOrEmpty(myPlayerId) && p.Id == myPlayerId)
+                    continue;
+
+                GameObject btnGO = Instantiate(privatePlayerButtonPrefab, privatePlayersContainer);
+                var txt = btnGO.GetComponentInChildren<TextMeshProUGUI>();
+                string displayName = GetLobbyPlayerDisplayName(p);
+                if (txt != null) txt.text = displayName;
+
+                Image bg = btnGO.GetComponent<Image>();
+
+                var entry = new PrivateEntry
+                {
+                    playerId = p.Id,
+                    clientId = 0,
+                    go = btnGO,
+                    bg = bg,
+                    hasUnread = false,
+                    baseColor = bg != null ? bg.color : Color.white,
+                    displayName = displayName
+                };
+                privateEntries[p.Id] = entry;
+
+                string targetId = p.Id;
+                var button = btnGO.GetComponent<Button>();
+                if (button != null)
+                {
+                    button.onClick.AddListener(() => OpenPrivateChannel(targetId, 0));
+                }
+
+                Debug.Log($"[LobbyUI] + jugador privado (lobby): {displayName} ({p.Id})");
+            }
+
+            filledFromLobby = true;
+        }
+
+        if (!filledFromLobby)
+        {
+            if (GameManager.Instance != null && GameManager.Instance.PlayersInLobby != null)
+            {
+                Debug.Log($"[LobbyUI] Refrescando privados desde GameManager. Jugadores: {GameManager.Instance.PlayersInLobby.Count}");
+                foreach (var p in GameManager.Instance.PlayersInLobby)
+                {
+                    if (p.ClientId == NetworkManager.Singleton.LocalClientId)
+                        continue;
+
+                    GameObject btnGO = Instantiate(privatePlayerButtonPrefab, privatePlayersContainer);
+                    var txt = btnGO.GetComponentInChildren<TextMeshProUGUI>();
+                    string displayName = SanitizeName(p.Username, p.ClientId);
+                    if (txt != null) txt.text = displayName;
+
+                    Image bg = btnGO.GetComponent<Image>();
+
+                    var entry = new PrivateEntry
+                    {
+                        playerId = null,
+                        clientId = p.ClientId,
+                        go = btnGO,
+                        bg = bg,
+                        hasUnread = false,
+                        baseColor = bg != null ? bg.color : Color.white,
+                        displayName = displayName
+                    };
+                    privateEntries[p.ClientId.ToString()] = entry;
+
+                    var button = btnGO.GetComponent<Button>();
+                    if (button != null)
+                    {
+                        ulong cid = p.ClientId;
+                        button.onClick.AddListener(() => OpenPrivateChannel(null, cid));
+                    }
+
+                    Debug.Log($"[LobbyUI] + jugador privado (GM): {displayName} (clientId {p.ClientId})");
+                }
+            }
+            else
+            {
+                Debug.Log("[LobbyUI] No hay lobby ni GameManager para listar privados.");
+            }
+        }
+    }
+
+    private string GetLobbyPlayerDisplayName(Unity.Services.Lobbies.Models.Player p)
+    {
+        if (p.Data != null && p.Data.TryGetValue("PlayerName", out var dataObj) && dataObj != null)
+        {
+            return dataObj.Value;
+        }
+
+        return p.Id;
+    }
+
+    private string GetConversationKey(string playerId, ulong clientId)
+    {
+        if (!string.IsNullOrEmpty(playerId))
+            return "pid:" + playerId;
+        if (clientId != 0)
+            return "cid:" + clientId;
+        return null;
+    }
+
+    private void OpenPrivateChannel(string targetPlayerId, ulong fallbackClientId)
+    {
+        currentPrivateTargetPlayerId = targetPlayerId;
+        currentPrivateTargetClientId = fallbackClientId;
+
+        Debug.Log($"[LobbyUI] Abriendo canal privado con: " +
+                  $"{(string.IsNullOrEmpty(targetPlayerId) ? $"clientId {fallbackClientId}" : targetPlayerId)}");
+
+        // quitar parpadeo
+        if (!string.IsNullOrEmpty(targetPlayerId))
+        {
+            if (privateEntries.TryGetValue(targetPlayerId, out var entry))
+            {
+                entry.hasUnread = false;
+                if (entry.bg != null) entry.bg.color = entry.baseColor;
+            }
+        }
+        else if (fallbackClientId != 0)
+        {
+            string key = fallbackClientId.ToString();
+            if (privateEntries.TryGetValue(key, out var entry))
+            {
+                entry.hasUnread = false;
+                if (entry.bg != null) entry.bg.color = entry.baseColor;
+            }
+        }
+
+        // repintar la conversación que ya había
+        RenderPrivateConversation(targetPlayerId, fallbackClientId);
+    }
+
+    private void RenderPrivateConversation(string targetPlayerId, ulong fallbackClientId)
+    {
+        if (privateMessagesContainer == null) return;
+
+        // limpiar UI
+        foreach (Transform child in privateMessagesContainer)
+            Destroy(child.gameObject);
+
+        // 1º intentamos con playerId
+        string keyPid = GetConversationKey(targetPlayerId, 0);
+        if (!string.IsNullOrEmpty(keyPid) && privateChatHistory.TryGetValue(keyPid, out var msgsPid))
+        {
+            foreach (var m in msgsPid)
+                AddPrivateMessageToUI(m.sender, m.text);
+            return;
+        }
+
+        // 2º intentamos con clientId
+        string keyCid = GetConversationKey(null, fallbackClientId);
+        if (!string.IsNullOrEmpty(keyCid) && privateChatHistory.TryGetValue(keyCid, out var msgsCid))
+        {
+            foreach (var m in msgsCid)
+                AddPrivateMessageToUI(m.sender, m.text);
+            return;
+        }
+    }
+
+    private void OnPrivateChatSubmit(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return;
+
+        if (string.IsNullOrEmpty(currentPrivateTargetPlayerId) && currentPrivateTargetClientId == 0)
+        {
+            Debug.LogWarning("[LobbyUI] Intenté enviar DM pero no hay destinatario seleccionado.");
+            return;
+        }
+
+        SendPrivateChat(text);
+        if (privateChatInputField != null)
+        {
+            privateChatInputField.text = string.Empty;
+            privateChatInputField.ActivateInputField();
+        }
+    }
+
+    private async void SendPrivateChat(string text)
+    {
+        string convKey = GetConversationKey(currentPrivateTargetPlayerId, currentPrivateTargetClientId);
+        if (!string.IsNullOrEmpty(convKey))
+        {
+            if (!privateChatHistory.TryGetValue(convKey, out var list))
+            {
+                list = new List<PrivateChatMessage>();
+                privateChatHistory[convKey] = list;
+            }
+            list.Add(new PrivateChatMessage { sender = "Yo", text = text });
+        }
+
+        if (!string.IsNullOrEmpty(currentPrivateTargetPlayerId))
+        {
+            Debug.Log($"[LobbyUI] Enviando DM a playerId {currentPrivateTargetPlayerId}: {text}");
+            if (VivoxLobbyChatManager.Instance != null)
+            {
+                await VivoxLobbyChatManager.Instance.SendDirectMessage(currentPrivateTargetPlayerId, text);
+            }
+            AddPrivateMessageToUI("Yo", text);
+        }
+        else if (currentPrivateTargetClientId != 0)
+        {
+            Debug.LogWarning($"[LobbyUI] Quise mandar DM al clientId {currentPrivateTargetClientId} pero no tengo playerId de Vivox/UGS.");
+            AddPrivateMessageToUI("Yo (local)", text);
+        }
+        else
+        {
+            Debug.LogWarning("[LobbyUI] No hay destinatario privado seleccionado.");
+        }
+    }
+
+    private void HandleDirectMessage(string senderName, string senderPlayerId, string message)
+    {
+        Debug.Log($"[LobbyUI] DM recibido de {senderName} ({senderPlayerId}): {message}");
+
+        // guardamos SIEMPRE
+        string key = GetConversationKey(senderPlayerId, 0);
+        if (!string.IsNullOrEmpty(key))
+        {
+            if (!privateChatHistory.TryGetValue(key, out var list))
+            {
+                list = new List<PrivateChatMessage>();
+                privateChatHistory[key] = list;
+            }
+            list.Add(new PrivateChatMessage { sender = senderName, text = message });
+        }
+
+        bool isCurrentOpenByPlayerId = !string.IsNullOrEmpty(currentPrivateTargetPlayerId) &&
+                                       currentPrivateTargetPlayerId == senderPlayerId;
+
+        bool isCurrentOpenByClientId = false;
+
+        if (!isCurrentOpenByPlayerId && currentPrivateTargetClientId != 0)
+        {
+            // ver si el actual se abrió por clientId pero el que escribe es ese mismo
+            foreach (var kvp in privateEntries)
+            {
+                var entry = kvp.Value;
+                if (!string.IsNullOrEmpty(entry.playerId) && entry.playerId == senderPlayerId)
+                {
+                    isCurrentOpenByClientId = true;
+                    break;
+                }
+            }
+        }
+
+        if (isCurrentOpenByPlayerId || isCurrentOpenByClientId)
+        {
+            // lo mostramos de una
+            AddPrivateMessageToUI(senderName, message);
+        }
+        else
+        {
+            // marcar como pendiente
+            if (privateEntries.TryGetValue(senderPlayerId, out var entry))
+            {
+                entry.hasUnread = true;
+            }
+            else
+            {
+                foreach (var kvp in privateEntries)
+                {
+                    var e = kvp.Value;
+                    if (!string.IsNullOrEmpty(e.playerId) && e.playerId == senderPlayerId)
+                    {
+                        e.hasUnread = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    private void AddPrivateMessageToUI(string sender, string message)
+    {
+        if (privateMessagePrefab == null || privateMessagesContainer == null)
+            return;
+
+        var go = Instantiate(privateMessagePrefab, privateMessagesContainer);
+        var txt = go.GetComponentInChildren<TextMeshProUGUI>();
+        if (txt != null)
+            txt.text = $"<b>{sender}:</b> {message}";
+    }
 }

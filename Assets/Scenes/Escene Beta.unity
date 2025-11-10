@@ -1083,6 +1083,7 @@ GameObject:
   - component: {fileID: 196217268}
   - component: {fileID: 196217267}
   - component: {fileID: 196217270}
+  - component: {fileID: 196217271}
   m_Layer: 0
   m_Name: Bloque (11)
   m_TagString: Cloud
@@ -1172,6 +1173,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   tagMismoTipo: Cloud
   tiempoReaparicion: 5
+--- !u!65 &196217271
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 196217266}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.8382, y: 0.83820015, z: 0.83820015}
+  m_Center: {x: 0, y: 0, z: 0.41910008}
 --- !u!1 &211372777
 GameObject:
   m_ObjectHideFlags: 0
@@ -2628,6 +2650,7 @@ GameObject:
   - component: {fileID: 373596953}
   - component: {fileID: 373596952}
   - component: {fileID: 373596955}
+  - component: {fileID: 373596956}
   m_Layer: 0
   m_Name: Bloque (8)
   m_TagString: Cloud
@@ -2717,6 +2740,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   tagMismoTipo: Cloud
   tiempoReaparicion: 5
+--- !u!65 &373596956
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 373596951}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.8382, y: 0.83820015, z: 0.83820015}
+  m_Center: {x: 0, y: 0, z: 0.41910008}
 --- !u!1 &381890559
 GameObject:
   m_ObjectHideFlags: 0
@@ -3159,6 +3203,7 @@ GameObject:
   - component: {fileID: 401115749}
   - component: {fileID: 401115748}
   - component: {fileID: 401115751}
+  - component: {fileID: 401115752}
   m_Layer: 0
   m_Name: Bloque (10)
   m_TagString: Cloud
@@ -3248,6 +3293,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   tagMismoTipo: Cloud
   tiempoReaparicion: 5
+--- !u!65 &401115752
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 401115747}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.8382, y: 0.83820015, z: 0.83820015}
+  m_Center: {x: 0, y: 0, z: 0.41910008}
 --- !u!1 &410087039
 GameObject:
   m_ObjectHideFlags: 0
@@ -3381,6 +3447,7 @@ GameObject:
   - component: {fileID: 418424398}
   - component: {fileID: 418424397}
   - component: {fileID: 418424400}
+  - component: {fileID: 418424401}
   m_Layer: 0
   m_Name: Bloque (12)
   m_TagString: Cloud
@@ -3470,6 +3537,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   tagMismoTipo: Cloud
   tiempoReaparicion: 5
+--- !u!65 &418424401
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 418424396}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.8382, y: 0.83820015, z: 0.83820015}
+  m_Center: {x: 0, y: 0, z: 0.41910008}
 --- !u!1 &426945728
 GameObject:
   m_ObjectHideFlags: 0
@@ -11395,6 +11483,7 @@ GameObject:
   - component: {fileID: 1136839682}
   - component: {fileID: 1136839681}
   - component: {fileID: 1136839684}
+  - component: {fileID: 1136839685}
   m_Layer: 0
   m_Name: Bloque (16)
   m_TagString: Cloud
@@ -11484,6 +11573,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   tagMismoTipo: Cloud
   tiempoReaparicion: 5
+--- !u!65 &1136839685
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1136839680}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.8382, y: 0.83820015, z: 0.83820015}
+  m_Center: {x: 0, y: 0, z: 0.41910008}
 --- !u!1 &1146040614
 GameObject:
   m_ObjectHideFlags: 0
@@ -15478,6 +15588,7 @@ GameObject:
   - component: {fileID: 1487315265}
   - component: {fileID: 1487315264}
   - component: {fileID: 1487315267}
+  - component: {fileID: 1487315268}
   m_Layer: 0
   m_Name: Bloque (15)
   m_TagString: Cloud
@@ -15567,6 +15678,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   tagMismoTipo: Cloud
   tiempoReaparicion: 5
+--- !u!65 &1487315268
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1487315263}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.8382, y: 0.83820015, z: 0.83820015}
+  m_Center: {x: 0, y: 0, z: 0.41910008}
 --- !u!1 &1491600576
 GameObject:
   m_ObjectHideFlags: 0
@@ -16417,6 +16549,7 @@ GameObject:
   - component: {fileID: 1579012340}
   - component: {fileID: 1579012339}
   - component: {fileID: 1579012342}
+  - component: {fileID: 1579012343}
   m_Layer: 0
   m_Name: Bloque (13)
   m_TagString: Cloud
@@ -16506,6 +16639,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   tagMismoTipo: Cloud
   tiempoReaparicion: 5
+--- !u!65 &1579012343
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1579012338}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.8382, y: 0.83820015, z: 0.83820015}
+  m_Center: {x: 0, y: 0, z: 0.41910008}
 --- !u!1 &1588118660
 GameObject:
   m_ObjectHideFlags: 0
@@ -17278,9 +17432,29 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   bloques:
-  - {fileID: 1231183754}
-  - {fileID: 2084501990}
   - {fileID: 849127550}
+  - {fileID: 2084501990}
+  - {fileID: 912161094}
+  - {fileID: 1366178615}
+  - {fileID: 1002637688}
+  - {fileID: 832997935}
+  - {fileID: 2008492918}
+  - {fileID: 2001634774}
+  - {fileID: 1638781896}
+  - {fileID: 719994580}
+  - {fileID: 1570439918}
+  - {fileID: 1482417983}
+  - {fileID: 1231183754}
+  - {fileID: 1327181254}
+  - {fileID: 738943404}
+  - {fileID: 1026570064}
+  - {fileID: 213103421}
+  - {fileID: 835220011}
+  - {fileID: 1146040618}
+  - {fileID: 1171809538}
+  - {fileID: 599540006}
+  - {fileID: 688479822}
+  - {fileID: 641047392}
   minTiempoEntreCaidas: 2.5
   maxTiempoEntreCaidas: 5
 --- !u!4 &1645574027
@@ -18461,6 +18635,7 @@ GameObject:
   - component: {fileID: 1800010588}
   - component: {fileID: 1800010587}
   - component: {fileID: 1800010590}
+  - component: {fileID: 1800010591}
   m_Layer: 0
   m_Name: Bloque (14)
   m_TagString: Cloud
@@ -18550,6 +18725,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   tagMismoTipo: Cloud
   tiempoReaparicion: 5
+--- !u!65 &1800010591
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1800010586}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.8382, y: 0.83820015, z: 0.83820015}
+  m_Center: {x: 0, y: 0, z: 0.41910008}
 --- !u!1 &1810299027
 GameObject:
   m_ObjectHideFlags: 0
@@ -20652,6 +20848,7 @@ GameObject:
   - component: {fileID: 2049602370}
   - component: {fileID: 2049602369}
   - component: {fileID: 2049602372}
+  - component: {fileID: 2049602373}
   m_Layer: 0
   m_Name: Bloque (9)
   m_TagString: Cloud
@@ -20741,6 +20938,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   tagMismoTipo: Cloud
   tiempoReaparicion: 5
+--- !u!65 &2049602373
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2049602368}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 0.8382, y: 0.83820015, z: 0.83820015}
+  m_Center: {x: 0, y: 0, z: 0.41910008}
 --- !u!1 &2053721288
 GameObject:
   m_ObjectHideFlags: 0

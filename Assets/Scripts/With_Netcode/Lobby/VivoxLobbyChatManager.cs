@@ -9,15 +9,39 @@ public class VivoxLobbyChatManager : MonoBehaviour
 {
     public static VivoxLobbyChatManager Instance { get; private set; }
 
-    // público (canal de lobby)
+    // Mensajes públicos (canal de lobby)
     public event Action<string, string, bool> OnTextMessage;
 
-    // privado (DM): senderName, senderPlayerId, message
+    // Mensajes privados (DM): senderName, senderPlayerId, message
     public event Action<string, string, string> OnDirectMessage;
 
     private string currentChannelName;
     private bool isLoggedIn;
     private bool iAmHost;
+
+    public string CurrentLobbyChannel => currentChannelName;
+
+    // --- Estados de voz para UI ---
+    public bool IsMicMuted
+    {
+        get
+        {
+            if (!isLoggedIn || VivoxService.Instance == null)
+                return false;
+            return VivoxService.Instance.IsInputDeviceMuted;
+        }
+    }
+
+    public bool IsDeafened
+    {
+        get
+        {
+            if (!isLoggedIn || VivoxService.Instance == null)
+                return false;
+            return VivoxService.Instance.IsOutputDeviceMuted;
+        }
+    }
+    public bool IsLoggedIn => isLoggedIn;
 
     private async void Awake()
     {
@@ -48,21 +72,17 @@ public class VivoxLobbyChatManager : MonoBehaviour
             return;
         }
 
-        if (isLoggedIn)
-            return;
+        if (isLoggedIn) return;
 
-        var options = new LoginOptions
-        {
-            DisplayName = displayName
-        };
-
+        var options = new LoginOptions { DisplayName = displayName };
         await VivoxService.Instance.LoginAsync(options);
         isLoggedIn = true;
 
+        // Eventos de texto canal
         VivoxService.Instance.ChannelMessageReceived -= OnChannelMessageReceived;
         VivoxService.Instance.ChannelMessageReceived += OnChannelMessageReceived;
 
-        // 👇 esto es para DMs
+        // Eventos de DM
         VivoxService.Instance.DirectedMessageReceived -= OnDirectedMessageReceived;
         VivoxService.Instance.DirectedMessageReceived += OnDirectedMessageReceived;
     }
@@ -72,25 +92,26 @@ public class VivoxLobbyChatManager : MonoBehaviour
         string sender = msg.SenderDisplayName;
         string text = msg.MessageText;
 
-        bool isHost = false;
+        bool isHostTag = false;
         if (!string.IsNullOrEmpty(text) && text.StartsWith("[HOST] "))
         {
-            isHost = true;
+            isHostTag = true;
             text = text.Substring(7);
         }
 
-        OnTextMessage?.Invoke(sender, text, isHost);
+        OnTextMessage?.Invoke(sender, text, isHostTag);
     }
 
     private void OnDirectedMessageReceived(VivoxMessage msg)
     {
         string senderName = msg.SenderDisplayName;
-        string senderPlayerId = msg.SenderPlayerId; // viene del Vivox/UGS
+        string senderPlayerId = msg.SenderPlayerId; // Id UGS
         string text = msg.MessageText;
 
         OnDirectMessage?.Invoke(senderName, senderPlayerId, text);
     }
 
+    // ===>> AHORA UNE TEXTO + VOZ EN EL MISMO CANAL DEL LOBBY
     public async Task JoinLobbyChannel(string lobbyCodeOrId)
     {
         if (!isLoggedIn)
@@ -103,11 +124,12 @@ public class VivoxLobbyChatManager : MonoBehaviour
 
         await VivoxService.Instance.JoinGroupChannelAsync(
             currentChannelName,
-            ChatCapability.TextOnly
+            ChatCapability.TextAndAudio   // <-- aquí el cambio
         );
 
         Debug.Log($"VivoxChat: unido al canal {currentChannelName}");
     }
+
 
     public async Task LeaveCurrentChannel()
     {
@@ -127,7 +149,7 @@ public class VivoxLobbyChatManager : MonoBehaviour
         await VivoxService.Instance.SendChannelTextMessageAsync(currentChannelName, finalMsg);
     }
 
-    // 👇 NUEVO: enviar DM a otro jugador por su playerId (el del Lobby/UGS)
+    // --- DMs (directo a playerId UGS) ---
     public async Task SendDirectMessage(string targetPlayerId, string message)
     {
         if (!isLoggedIn)
@@ -137,6 +159,39 @@ public class VivoxLobbyChatManager : MonoBehaviour
         }
 
         await VivoxService.Instance.SendDirectTextMessageAsync(targetPlayerId, message);
+    }
+
+    // --- Controles de VOZ para UI ---
+    public void ToggleMicMute()
+    {
+        if (VivoxService.Instance == null) return;
+
+        if (VivoxService.Instance.IsInputDeviceMuted)
+        {
+            VivoxService.Instance.UnmuteInputDevice();
+            Debug.Log("[VivoxVoice] Mic: UNMUTED");
+        }
+        else
+        {
+            VivoxService.Instance.MuteInputDevice();
+            Debug.Log("[VivoxVoice] Mic: MUTED");
+        }
+    }
+
+    public void ToggleDeafen()
+    {
+        if (VivoxService.Instance == null) return;
+
+        if (VivoxService.Instance.IsOutputDeviceMuted)
+        {
+            VivoxService.Instance.UnmuteOutputDevice();
+            Debug.Log("[VivoxVoice] Output: UNMUTED");
+        }
+        else
+        {
+            VivoxService.Instance.MuteOutputDevice();
+            Debug.Log("[VivoxVoice] Output: MUTED (Deafened)");
+        }
     }
 
     private async void OnDestroy()

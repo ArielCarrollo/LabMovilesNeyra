@@ -43,6 +43,21 @@ public class LobbyUIManager : MonoBehaviour
     [SerializeField] private GameObject privateMessagePrefab;
     [SerializeField] private TMP_InputField privateChatInputField;
     [SerializeField] private Color privateUnreadColor = Color.yellow;
+    // --- Voice (Vivox) ---
+    [Header("Vivox Voice UI")]
+    [SerializeField] private Button micToggleButton;
+    [SerializeField] private TextMeshProUGUI micStateText;
+    [SerializeField] private Button deafenToggleButton;
+    [SerializeField] private TextMeshProUGUI deafenStateText;
+
+    // 👇 añade estos
+    [SerializeField] private Sprite micOnSprite;
+    [SerializeField] private Sprite micOffSprite;
+    [SerializeField] private Sprite deafenOnSprite;   // ensordecido
+    [SerializeField] private Sprite deafenOffSprite;  // escuchando
+
+    // refresh pasivo del estado
+    private float _voiceUiRefreshTimer = 0f;
 
     [Header("Colors")]
     [SerializeField] private Color readyColor = Color.green;
@@ -179,7 +194,20 @@ public class LobbyUIManager : MonoBehaviour
             privateChatInputField.onSubmit?.RemoveAllListeners();
             privateChatInputField.onEndEdit.AddListener(OnPrivateChatSubmit);
         }
-
+        
+        // Voice buttons
+        if (micToggleButton)
+        {
+            micToggleButton.onClick.RemoveAllListeners();
+            micToggleButton.onClick.AddListener(OnToggleMicClicked);
+        }
+        if (deafenToggleButton)
+        {
+            deafenToggleButton.onClick.RemoveAllListeners();
+            deafenToggleButton.onClick.AddListener(OnToggleDeafenClicked);
+        }
+        // Pinta estado inicial
+        RefreshVoiceUI();
         ShowPublicChatPanel(); // al entrar pintamos el historial público
         StartCoroutine(InitialListRefresh());
     }
@@ -245,6 +273,12 @@ public class LobbyUIManager : MonoBehaviour
                     entry.bg.color = Color.Lerp(entry.baseColor, privateUnreadColor, t);
                 }
             }
+        }
+        _voiceUiRefreshTimer += Time.unscaledDeltaTime;
+        if (_voiceUiRefreshTimer >= 0.5f)
+        {
+            _voiceUiRefreshTimer = 0f;
+            RefreshVoiceUI();
         }
     }
 
@@ -972,4 +1006,92 @@ public class LobbyUIManager : MonoBehaviour
         if (txt != null)
             txt.text = $"<b>{sender}:</b> {message}";
     }
+    private void OnToggleMicClicked()
+    {
+        if (VivoxLobbyChatManager.Instance != null)
+        {
+            VivoxLobbyChatManager.Instance.ToggleMicMute();
+            RefreshVoiceUI();
+        }
+    }
+
+    private void OnToggleDeafenClicked()
+    {
+        if (VivoxLobbyChatManager.Instance != null)
+        {
+            VivoxLobbyChatManager.Instance.ToggleDeafen();
+            RefreshVoiceUI();
+        }
+    }
+    private void RefreshVoiceUI()
+    {
+        var v = VivoxLobbyChatManager.Instance;
+        if (v == null)
+        {
+            if (micStateText) micStateText.text = "Mic: —";
+            if (deafenStateText) deafenStateText.text = "Audio: —";
+            return;
+        }
+
+        if (!v.IsLoggedIn) return;
+
+
+        bool micMuted = v.IsMicMuted;
+        bool deafened = v.IsDeafened;
+
+        if (micStateText) micStateText.text = micMuted ? "Mic: Silenciado" : "Mic: Activado";
+        if (deafenStateText) deafenStateText.text = deafened ? "Audio: Ensordecido" : "Audio: Activo";
+
+        // ===== MIC ICON (hijo) =====
+        if (micToggleButton != null)
+        {
+            Image icon = null;
+            var t = micToggleButton.transform.Find("Icon");
+            if (t != null) icon = t.GetComponent<Image>();
+            if (icon == null)
+            {
+                foreach (var img in micToggleButton.GetComponentsInChildren<Image>(true))
+                {
+                    if (img.gameObject == micToggleButton.gameObject) continue;
+                    icon = img;
+                    break;
+                }
+            }
+
+            if (icon != null)
+            {
+                if (micMuted && micOffSprite != null)
+                    icon.sprite = micOffSprite;
+                else if (!micMuted && micOnSprite != null)
+                    icon.sprite = micOnSprite;
+            }
+        }
+
+        // ===== DEAFEN ICON (hijo) =====
+        if (deafenToggleButton != null)
+        {
+            Image icon = null;
+            var t = deafenToggleButton.transform.Find("Icon");
+            if (t != null) icon = t.GetComponent<Image>();
+            if (icon == null)
+            {
+                foreach (var img in deafenToggleButton.GetComponentsInChildren<Image>(true))
+                {
+                    if (img.gameObject == deafenToggleButton.gameObject) continue;
+                    icon = img;
+                    break;
+                }
+            }
+
+            if (icon != null)
+            {
+                if (deafened && deafenOnSprite != null)
+                    icon.sprite = deafenOnSprite;
+                else if (!deafened && deafenOffSprite != null)
+                    icon.sprite = deafenOffSprite;
+            }
+        }
+    }
+
+
 }

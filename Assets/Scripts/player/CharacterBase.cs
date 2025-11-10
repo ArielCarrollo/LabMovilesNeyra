@@ -1,9 +1,11 @@
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
+using UnityEngine.InputSystem; 
 
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(NetworkTransform))]
+[RequireComponent(typeof(NetworkAnimator))]
 public abstract class CharacterBase : NetworkBehaviour
 {
     [Header("Stats Base del Personaje")]
@@ -12,6 +14,16 @@ public abstract class CharacterBase : NetworkBehaviour
     [SerializeField] protected int fuerzaBase = 10;
     [SerializeField] protected int nivelBase = 1;
     [SerializeField] protected float estaminaMaxima = 100f;
+
+    [Header("Lógica de Movimiento")]
+    [SerializeField, Tooltip("Qué tan rápido gira el personaje (más alto es más rápido)")]
+    private float rotationSpeed = 15f;
+
+    [Header("Lógica de Salto")]
+    [SerializeField] private float jumpForce = 7f;
+    [SerializeField] private Transform groundCheck;
+    [SerializeField] private LayerMask groundMask;
+    [SerializeField] private float groundDistance = 0.3f;
 
     [Header("Componentes")]
     protected Rigidbody rb;
@@ -23,121 +35,140 @@ public abstract class CharacterBase : NetworkBehaviour
     public NetworkVariable<int> Nivel = new NetworkVariable<int>();
     public NetworkVariable<float> Estamina = new NetworkVariable<float>();
 
-   
     private float serverMoveInput;
-    private bool isFacingRight = true;
+    private bool serverIsGrounded;
 
     private float clientMoveInput;
 
 
-   
     protected virtual void Awake()
     {
         rb = GetComponent<Rigidbody>();
         animator = GetComponent<Animator>();
     }
 
-    /// <summary>
-    /// OnNetworkSpawn se llama cuando el objeto se instancia en la red.
-    /// Es el lugar correcto para inicializar NetworkVariables y l�gica de red.
-    /// </summary>
     public override void OnNetworkSpawn()
     {
-        // --- CONFIGURACI�N DE RIGIDBODY ---
-        // Congelamos la rotaci�n en X/Z y el movimiento en Z para el 2.5D
-        //rb.constraints = RigidbodyConstraints.FreezePositionZ | RigEidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
-
+        transform.rotation = Quaternion.Euler(0, 90, 0);
         if (IsServer)
         {
-            // El servidor inicializa las estad�sticas
             Vida.Value = vidaMaxima;
             Fuerza.Value = fuerzaBase;
             Nivel.Value = nivelBase;
             Estamina.Value = estaminaMaxima;
         }
+    }
+    // --- MANEJO DE INPUT
+    public virtual void OnMove(InputAction.CallbackContext context)
+    {
+        if (!IsOwner) return;
 
-        // Si eres el cliente due�o de este objeto...
-        if (IsOwner)
+        clientMoveInput = context.ReadValue<float>();
+    }
+    public virtual void OnJump(InputAction.CallbackContext context)
+    {
+        if (!IsOwner) return;
+
+        if (context.performed)
         {
-            // Aqu� ir�a la l�gica para activar tu c�mara (Cinemachine, etc.)
-            // Ejemplo: FindObjectOfType<CinemachineVirtualCamera>().Follow = transform;
+            JumpServerRpc();
+        }
+    }
+    public virtual void OnNormalAttack(InputAction.CallbackContext context)
+    {
+        if (!IsOwner) return;
+        if (context.performed)
+        {
+            // El cliente pide al servidor ejecutar el puñete base
+            NormalAttackServerRpc();
+        }
+    }
+    public virtual void OnUltimateAttack(InputAction.CallbackContext context)
+    {
+        if (!IsOwner) return;
+        if (context.performed)
+        {
+            // El cliente pide al servidor ejecutar la ulti
+            UltimateAttackServerRpc();
         }
     }
 
-    /// <summary>
-    /// Update se usa para leer inputs (en el cliente due�o)
-    /// </summary>
+    [Rpc(SendTo.Server)]
+    protected virtual void UpdateServerMovementRpc(float moveInput)
+    {
+        this.serverMoveInput = moveInput;
+    }
+
+    [Rpc(SendTo.Server)]
+    protected virtual void JumpServerRpc()
+    {
+        if (serverIsGrounded)
+        {
+            rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+
+            // ¡NUEVO! Dispara el trigger de animación
+            animator.SetTrigger("Jump");
+        }
+    }
+    [Rpc(SendTo.Server)]
+    protected virtual void NormalAttackServerRpc()
+    {
+        Debug.Log("SERVIDOR: ¡Ejecutando PUÑETE BASE!");
+        animator.SetTrigger("NormalAttack");
+    }
+
+   
+    [Rpc(SendTo.Server)]
+    protected virtual void UltimateAttackServerRpc()
+    {
+        // Esta función está vacía a propósito.
+        // El script "Ninja" o "Odin" la sobreescribirá con su Ulti.
+        Debug.Log("SERVIDOR: Ulti base (no hace nada)");
+    }
     protected virtual void Update()
     {
-        // Solo el cliente due�o de este objeto puede controlar el input
         if (!IsOwner) return;
 
-        // Leemos el input localmente
-        clientMoveInput = Input.GetAxisRaw("Horizontal");
-
-        // Enviamos el input al servidor usando un ServerRpc
         UpdateServerMovementRpc(clientMoveInput);
     }
 
-    /// <summary>
-    /// FixedUpdate se usa para aplicar f�sica (en el servidor)
-    /// </summary>
     protected virtual void FixedUpdate()
     {
         // Solo el servidor tiene autoridad para mover el Rigidbody
         if (!IsServer) return;
 
+        serverIsGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
+
         HandleMovementAndRotation();
+
+      
     }
 
-    /// <summary>
-    /// El servidor ejecuta esta l�gica de movimiento y rotaci�n.
-    /// </summary>
     private void HandleMovementAndRotation()
     {
-        // 1. APLICAR MOVIMIENTO
-        // Mantenemos la velocidad vertical (gravedad/salto) y aplicamos la horizontal
+        // 1. APLICAR MOVIMIENTO (Esto ya lo tienes y está bien)
         rb.linearVelocity = new Vector3(serverMoveInput * velocidad, rb.linearVelocity.y, 0f);
 
-        // 2. APLICAR ROTACI�N (FLIP)
-        // A diferencia del 2D, en 3D no cambiamos la 'scale', rotamos el objeto 180 grados en Y.
-        if (serverMoveInput > 0 && !isFacingRight)
+        // 2. APLICAR ROTACIÓN SUAVE (FLIP)
+        if (serverMoveInput != 0) // Solo rotar si hay input
         {
-            isFacingRight = true;
-            // Mirar a la derecha (rotaci�n 0)
-            transform.rotation = Quaternion.Euler(0, 0, 0);
-        }
-        else if (serverMoveInput < 0 && isFacingRight)
-        {
-            isFacingRight = false;
-            // Mirar a la izquierda (rotaci�n 180)
-            transform.rotation = Quaternion.Euler(0, 180, 0);
+            // --- ¡ESTA ES LA LÓGICA CORREGIDA! ---
+
+            // Determina la rotación objetivo (en grados Y)
+            // 90 = Mirar a la derecha (eje X positivo)
+            // -90 = Mirar a la izquierda (eje X negativo)
+            Quaternion targetRotation = (serverMoveInput > 0)
+                                        ? Quaternion.Euler(0, 90, 0)
+                                        : Quaternion.Euler(0, -90, 0);
+
+            // Usa Slerp para interpolar suavemente hacia la rotación objetivo
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.fixedDeltaTime * rotationSpeed);
         }
 
-        // 3. ACTUALIZAR ANIMATOR (El servidor lo controla)
-        // float currentSpeed = Mathf.Abs(rb.velocity.x);
-        // animator.SetFloat("Speed", currentSpeed);
+        float currentSpeed = Mathf.Abs(rb.linearVelocity.x);
+        animator.SetFloat("Speed", currentSpeed);
+        animator.SetBool("IsGrounded", serverIsGrounded);
     }
 
-    // --- COMUNICACI�N DE RED (RPCs) ---
 
-    /// <summary>
-    /// [ServerRpc]
-    /// El cliente due�o llama a esta funci�n. Se ejecuta EN EL SERVIDOR.
-    /// </summary>
-    [Rpc(SendTo.Server)]
-    protected virtual void UpdateServerMovementRpc(float moveInput)
-    {
-        // El servidor almacena el input recibido para usarlo en FixedUpdate
-        this.serverMoveInput = moveInput;
-    }
-
-    // Aqu� pondremos funciones comunes como TakeDamage()
-    // [ServerRpc]
-    // public virtual void TakeDamageServerRpc(int damage)
-    // {
-    //    if (!IsServer) return;
-    //    Vida.Value -= damage;
-    //    if (Vida.Value <= 0) Die();
-    // }
 }

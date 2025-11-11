@@ -1,3 +1,4 @@
+using System.Collections; // Necesario para la corrutina
 using UnityEngine;
 
 // ponle BoxCollider y Rigidbody 3D al objeto
@@ -5,7 +6,8 @@ using UnityEngine;
 [RequireComponent(typeof(Rigidbody))]
 public class FallingBlock : MonoBehaviour
 {
-    [SerializeField] private float destruirDespues = 4f;
+    // [SerializeField] private float destruirDespues = 4f; // REEMPLAZADO
+    [SerializeField] private float tiempoParaDesactivar = 1.5f; // NUEVO
 
     private Rigidbody rb;
     private bool yaCayo;
@@ -30,6 +32,19 @@ public class FallingBlock : MonoBehaviour
         rb.constraints = RigidbodyConstraints.FreezeRotationX |
                          RigidbodyConstraints.FreezeRotationZ;
 
-        Destroy(gameObject, destruirDespues);
+        // Destroy(gameObject, destruirDespues); // REEMPLAZADO
+
+        // Inicia la corrutina para desactivar el bloque después del tiempo
+        StartCoroutine(DesactivarDespuesDeCaer());
+    }
+
+    // NUEVA CORRUTINA
+    private IEnumerator DesactivarDespuesDeCaer()
+    {
+        // Espera el tiempo que indicaste (1.5 segundos)
+        yield return new WaitForSeconds(tiempoParaDesactivar);
+
+        // Desactiva el objeto en lugar de destruirlo
+        gameObject.SetActive(false);
     }
 }

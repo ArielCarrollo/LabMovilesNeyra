@@ -1,7 +1,9 @@
 using Unity.Netcode;
 using Unity.Netcode.Components;
 using UnityEngine;
-using UnityEngine.InputSystem; 
+using UnityEngine.InputSystem;
+using System.Collections;
+
 
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(NetworkTransform))]
@@ -29,7 +31,29 @@ public abstract class CharacterBase : NetworkBehaviour
     protected Rigidbody rb;
     protected Animator animator;
 
-    
+    [Header("Lógica de Ataque Básico")]
+    [SerializeField, Tooltip("El punto en la mano que detecta el golpe")]
+    private Transform hitPoint;
+
+    [SerializeField, Tooltip("El radio del golpe (qué tan grande es el 'puño')")]
+    private float hitRadius = 0.5f;
+
+    [SerializeField, Tooltip("La fuerza con la que el puñete lanza objetos")]
+    private float punchForce = 15f;
+
+    [SerializeField, Tooltip("Qué capas (Layers) pueden ser golpeadas por el puñete")]
+    private LayerMask hitableLayers;
+
+
+    [SerializeField, Tooltip("Segundos desde que se presiona el botón hasta que se registra el golpe")]
+    private float attackDelay = 0.3f; // El 'delay' que pediste
+
+    [SerializeField, Tooltip("Tiempo total entre un ataque y el siguiente (cooldown)")]
+    private float attackCooldown = 0.8f; // El 'cooldown' que pediste
+
+    // Variable del servidor para rastrear el cooldown
+    private float nextAttackTime = 0f;
+
     public NetworkVariable<int> Vida = new NetworkVariable<int>();
     public NetworkVariable<int> Fuerza = new NetworkVariable<int>();
     public NetworkVariable<int> Nivel = new NetworkVariable<int>();
@@ -110,19 +134,23 @@ public abstract class CharacterBase : NetworkBehaviour
             animator.SetTrigger("Jump");
         }
     }
+   
     [Rpc(SendTo.Server)]
     protected virtual void NormalAttackServerRpc()
     {
-        Debug.Log("SERVIDOR: ¡Ejecutando PUÑETE BASE!");
+        if (Time.time < nextAttackTime)
+        {
+            return;
+        }
+        nextAttackTime = Time.time + attackCooldown;
+        Debug.Log("SERVIDOR: ¡Iniciando PUÑETE BASE!");
         animator.SetTrigger("NormalAttack");
+        StartCoroutine(HitCheckDelay());
     }
 
-   
     [Rpc(SendTo.Server)]
     protected virtual void UltimateAttackServerRpc()
     {
-        // Esta función está vacía a propósito.
-        // El script "Ninja" o "Odin" la sobreescribirá con su Ulti.
         Debug.Log("SERVIDOR: Ulti base (no hace nada)");
     }
     protected virtual void Update()
@@ -134,7 +162,6 @@ public abstract class CharacterBase : NetworkBehaviour
 
     protected virtual void FixedUpdate()
     {
-        // Solo el servidor tiene autoridad para mover el Rigidbody
         if (!IsServer) return;
 
         serverIsGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
@@ -146,22 +173,15 @@ public abstract class CharacterBase : NetworkBehaviour
 
     private void HandleMovementAndRotation()
     {
-        // 1. APLICAR MOVIMIENTO (Esto ya lo tienes y está bien)
         rb.linearVelocity = new Vector3(serverMoveInput * velocidad, rb.linearVelocity.y, 0f);
 
-        // 2. APLICAR ROTACIÓN SUAVE (FLIP)
-        if (serverMoveInput != 0) // Solo rotar si hay input
+        if (serverMoveInput != 0) 
         {
-            // --- ¡ESTA ES LA LÓGICA CORREGIDA! ---
-
-            // Determina la rotación objetivo (en grados Y)
-            // 90 = Mirar a la derecha (eje X positivo)
-            // -90 = Mirar a la izquierda (eje X negativo)
+ 
             Quaternion targetRotation = (serverMoveInput > 0)
                                         ? Quaternion.Euler(0, 90, 0)
                                         : Quaternion.Euler(0, -90, 0);
 
-            // Usa Slerp para interpolar suavemente hacia la rotación objetivo
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.fixedDeltaTime * rotationSpeed);
         }
 
@@ -170,5 +190,35 @@ public abstract class CharacterBase : NetworkBehaviour
         animator.SetBool("IsGrounded", serverIsGrounded);
     }
 
+    public void HitCheck()
+    {
+        if (!IsServer) return;
 
+        Debug.Log("SERVIDOR: ¡HitCheck! Buscando golpes en " + hitPoint.position);
+
+        Collider[] hits = Physics.OverlapSphere(hitPoint.position, hitRadius, hitableLayers);
+
+        foreach (Collider hit in hits)
+        {
+            if (hit.transform == this.transform) continue;
+
+            if (hit.TryGetComponent<Rigidbody>(out Rigidbody objectRb))
+            {
+                Debug.Log("SERVIDOR: ¡Golpe conectado con " + hit.name + "!");
+
+                Vector3 direction = (hit.transform.position - transform.position).normalized + (Vector3.up * 0.3f);
+
+                objectRb.AddForce(direction * punchForce, ForceMode.Impulse);
+            }
+        }
+    }
+    private IEnumerator HitCheckDelay()
+    {
+        // 1. ESPERAR EL TIEMPO DE RETRASO (el float del Inspector)
+        yield return new WaitForSeconds(attackDelay);
+
+        // 2. LLAMAR A LA FUNCIÓN DE GOLPE
+        // (La función HitCheck() que ya tenías no necesita cambios)
+        HitCheck();
+    }
 }

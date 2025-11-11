@@ -13,6 +13,7 @@ public class UiGameManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI errorText;
     [SerializeField] private GameObject lobbySelectionPanel;
     [SerializeField] private GameObject lobbiesPanel;
+    [SerializeField] private GameObject loginRootPanel;
     [Header("Login UI")]
     [SerializeField] private TMP_InputField loginUsername;
     [SerializeField] private TMP_InputField loginPassword;
@@ -106,6 +107,7 @@ public class UiGameManager : MonoBehaviour
     {
         loginPanel.SetActive(false);
         registerPanel.SetActive(false);
+        loginRootPanel.SetActive(false);
         errorText.gameObject.SetActive(false);
         if (lobbySelectionPanel) lobbySelectionPanel.SetActive(true);
     }
@@ -137,6 +139,7 @@ public class UiGameManager : MonoBehaviour
         loginPanel.SetActive(false);
         registerPanel.SetActive(false);
         errorText.gameObject.SetActive(false);
+        loginRootPanel.SetActive(false);
         lobbyUIManager.Initialize();
     }
     public void GoToLobbySelection()
@@ -146,6 +149,7 @@ public class UiGameManager : MonoBehaviour
         loginPanel.SetActive(false);
         registerPanel.SetActive(false);
         errorText.gameObject.SetActive(false);
+        loginRootPanel.SetActive(false);
     }
 
 }

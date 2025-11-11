@@ -5898,7 +5898,7 @@ Animator:
   m_Controller: {fileID: 9100000, guid: f5e71d2eda3d6cc40857811c187df502, type: 2}
   m_CullingMode: 1
   m_UpdateMode: 0
-  m_ApplyRootMotion: 1
+  m_ApplyRootMotion: 0
   m_LinearVelocityBlending: 0
   m_StabilizeFeet: 0
   m_AnimatePhysics: 0
@@ -5941,7 +5941,7 @@ CapsuleCollider:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4777217671088863566}
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 13400000, guid: 903272fb363fa924d8907609676e4070, type: 2}
   m_IncludeLayers:
     serializedVersion: 2
     m_Bits: 0
@@ -6195,12 +6195,16 @@ MonoBehaviour:
   groundDistance: 1.38
   hitPoint: {fileID: 408424511477385107}
   hitRadius: 0.5
-  punchForce: 15
+  punchForce: 10
   hitableLayers:
     serializedVersion: 2
     m_Bits: 256
   attackDelay: 0.3
   attackCooldown: 0.8
+  knockbackDuration: 1
+  verticalKnockup: 7
+  CurrentState:
+    m_InternalValue: 0
   Vida:
     m_InternalValue: 0
   Fuerza:

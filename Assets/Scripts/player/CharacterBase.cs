@@ -3,7 +3,11 @@ using Unity.Netcode.Components;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using System.Collections;
-
+public enum PlayerState
+{
+    Normal,
+    Knockback
+}
 
 [RequireComponent(typeof(Rigidbody))]
 [RequireComponent(typeof(NetworkTransform))]
@@ -43,17 +47,19 @@ public abstract class CharacterBase : NetworkBehaviour
 
     [SerializeField, Tooltip("Qué capas (Layers) pueden ser golpeadas por el puñete")]
     private LayerMask hitableLayers;
-
-
     [SerializeField, Tooltip("Segundos desde que se presiona el botón hasta que se registra el golpe")]
-    private float attackDelay = 0.3f; // El 'delay' que pediste
-
+    private float attackDelay = 0.3f; 
     [SerializeField, Tooltip("Tiempo total entre un ataque y el siguiente (cooldown)")]
-    private float attackCooldown = 0.8f; // El 'cooldown' que pediste
-
-    // Variable del servidor para rastrear el cooldown
+    private float attackCooldown = 0.8f; 
     private float nextAttackTime = 0f;
 
+    [Header("Lógica de Knockback")]
+    [SerializeField, Tooltip("Segundos que el jugador queda en estado 'Knockback'")]
+    private float knockbackDuration = 0.5f;
+    [SerializeField, Tooltip("La fuerza vertical (hacia arriba) fija del golpe")]
+    private float verticalKnockup = 7f;
+
+    public NetworkVariable<PlayerState> CurrentState = new NetworkVariable<PlayerState>(PlayerState.Normal);
     public NetworkVariable<int> Vida = new NetworkVariable<int>();
     public NetworkVariable<int> Fuerza = new NetworkVariable<int>();
     public NetworkVariable<int> Nivel = new NetworkVariable<int>();
@@ -85,13 +91,16 @@ public abstract class CharacterBase : NetworkBehaviour
     // --- MANEJO DE INPUT
     public virtual void OnMove(InputAction.CallbackContext context)
     {
-        if (!IsOwner) return;
-
+        if (!IsOwner || CurrentState.Value != PlayerState.Normal)
+        {
+            clientMoveInput = 0; 
+            return;
+        }
         clientMoveInput = context.ReadValue<float>();
     }
     public virtual void OnJump(InputAction.CallbackContext context)
     {
-        if (!IsOwner) return;
+        if (!IsOwner || CurrentState.Value != PlayerState.Normal) return;
 
         if (context.performed)
         {
@@ -100,19 +109,19 @@ public abstract class CharacterBase : NetworkBehaviour
     }
     public virtual void OnNormalAttack(InputAction.CallbackContext context)
     {
-        if (!IsOwner) return;
+        if (!IsOwner || CurrentState.Value != PlayerState.Normal) return;
+        
         if (context.performed)
         {
-            // El cliente pide al servidor ejecutar el puñete base
             NormalAttackServerRpc();
         }
     }
     public virtual void OnUltimateAttack(InputAction.CallbackContext context)
     {
-        if (!IsOwner) return;
+        if (!IsOwner || CurrentState.Value != PlayerState.Normal) return;
+        
         if (context.performed)
         {
-            // El cliente pide al servidor ejecutar la ulti
             UltimateAttackServerRpc();
         }
     }
@@ -166,9 +175,13 @@ public abstract class CharacterBase : NetworkBehaviour
 
         serverIsGrounded = Physics.CheckSphere(groundCheck.position, groundDistance, groundMask);
 
-        HandleMovementAndRotation();
-
-      
+        if (CurrentState.Value == PlayerState.Normal)
+        {
+            HandleMovementAndRotation();
+        }
+        float currentSpeed = Mathf.Abs(rb.linearVelocity.x);
+        animator.SetFloat("Speed", currentSpeed);
+        animator.SetBool("IsGrounded", serverIsGrounded);
     }
 
     private void HandleMovementAndRotation()
@@ -185,40 +198,76 @@ public abstract class CharacterBase : NetworkBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.fixedDeltaTime * rotationSpeed);
         }
 
-        float currentSpeed = Mathf.Abs(rb.linearVelocity.x);
-        animator.SetFloat("Speed", currentSpeed);
-        animator.SetBool("IsGrounded", serverIsGrounded);
+      
     }
 
     public void HitCheck()
     {
         if (!IsServer) return;
-
         Debug.Log("SERVIDOR: ¡HitCheck! Buscando golpes en " + hitPoint.position);
 
         Collider[] hits = Physics.OverlapSphere(hitPoint.position, hitRadius, hitableLayers);
 
         foreach (Collider hit in hits)
         {
-            if (hit.transform == this.transform) continue;
+            if (hit.transform == this.transform) continue; 
 
-            if (hit.TryGetComponent<Rigidbody>(out Rigidbody objectRb))
+
+            Vector3 direction = (hit.transform.position - transform.position).normalized + (Vector3.up * 0.3f);
+
+            if (hit.TryGetComponent<CharacterBase>(out CharacterBase victimPlayer))
             {
-                Debug.Log("SERVIDOR: ¡Golpe conectado con " + hit.name + "!");
+                // 1. Calcular la dirección HORIZONTAL
+                Vector3 horizontalDir = (hit.transform.position - transform.position);
+                horizontalDir.y = 0; // Ignorar diferencia de altura
+                horizontalDir.z = 0; // Estar seguros de que es 2D
+                horizontalDir.Normalize(); // Dirección pura (izquierda o derecha)
 
-                Vector3 direction = (hit.transform.position - transform.position).normalized + (Vector3.up * 0.3f);
+                Debug.Log("SERVIDOR: ¡Golpe conectado con JUGADOR " + hit.name + "!");
 
-                objectRb.AddForce(direction * punchForce, ForceMode.Impulse);
+                // 2. Llamar a ApplyKnockback SÓLO con la fuerza horizontal
+                victimPlayer.ApplyKnockback(horizontalDir, punchForce);
+            }
+            // Opción 2: ¿Es un objeto (barril, etc.)?
+            else if (hit.TryGetComponent<Rigidbody>(out Rigidbody objectRb))
+            {
+                // A los objetos sí les damos la dirección original (con el 'up')
+                Vector3 objectDirection = (hit.transform.position - transform.position).normalized + (Vector3.up * 0.3f);
+                Debug.Log("SERVIDOR: ¡Golpe conectado con OBJETO " + hit.name + "!");
+                objectRb.AddForce(objectDirection * punchForce, ForceMode.Impulse);
             }
         }
     }
     private IEnumerator HitCheckDelay()
     {
-        // 1. ESPERAR EL TIEMPO DE RETRASO (el float del Inspector)
         yield return new WaitForSeconds(attackDelay);
 
-        // 2. LLAMAR A LA FUNCIÓN DE GOLPE
-        // (La función HitCheck() que ya tenías no necesita cambios)
         HitCheck();
+    }
+
+    public void ApplyKnockback(Vector3 horizontalDirection, float horizontalForce)
+    {
+        if (!IsServer) return;
+
+        if (CurrentState.Value != PlayerState.Normal) return;
+
+        CurrentState.Value = PlayerState.Knockback;
+
+        rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0, rb.linearVelocity.z);
+
+        // 2. Aplica las dos fuerzas POR SEPARADO
+        rb.AddForce(horizontalDirection * horizontalForce, ForceMode.Impulse); // Fuerza Horizontal (costado)
+        rb.AddForce(Vector3.up * verticalKnockup, ForceMode.Impulse);          // Fuerza Vertical (arriba)
+
+        StartCoroutine(KnockbackCooldown());
+    }
+
+    private IEnumerator KnockbackCooldown()
+    {
+        yield return new WaitForSeconds(knockbackDuration);
+
+        // Resetea la velocidad por si acaso (opcional)
+        // rb.velocity = Vector3.zero; 
+        CurrentState.Value = PlayerState.Normal;
     }
 }

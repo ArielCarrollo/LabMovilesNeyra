@@ -1,13 +1,12 @@
-using System.Collections; // Necesario para la corrutina
+using System.Collections;
 using UnityEngine;
 
 // ponle BoxCollider y Rigidbody 3D al objeto
 [RequireComponent(typeof(BoxCollider))]
 [RequireComponent(typeof(Rigidbody))]
-public class FallingBlock : MonoBehaviour
+public class FallingBlock : MonoBehaviour, IDestructible
 {
-    // [SerializeField] private float destruirDespues = 4f; // REEMPLAZADO
-    [SerializeField] private float tiempoParaDesactivar = 1.5f; // NUEVO
+    [SerializeField] private float tiempoParaDesactivar = 1.5f;
 
     private Rigidbody rb;
     private bool yaCayo;
@@ -16,35 +15,48 @@ public class FallingBlock : MonoBehaviour
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
-        rb.useGravity = false;      // quieto
-        rb.isKinematic = true;      // no se mueve hasta que lo suelto
+        rb.useGravity = false;
+        rb.isKinematic = true; // empieza quieto
     }
 
+    /// <summary>
+    /// Lógica propia del bloque: se suelta y luego se desactiva.
+    /// </summary>
     public void HacerCaer()
     {
         if (yaCayo) return;
-        yaCayo = true;
 
+        yaCayo = true;
         rb.isKinematic = false;
         rb.useGravity = true;
 
-        // opcional: para que caiga recto sin voltear
-        rb.constraints = RigidbodyConstraints.FreezeRotationX |
-                         RigidbodyConstraints.FreezeRotationZ;
-
-        // Destroy(gameObject, destruirDespues); // REEMPLAZADO
-
-        // Inicia la corrutina para desactivar el bloque después del tiempo
-        StartCoroutine(DesactivarDespuesDeCaer());
+        StartCoroutine(DesactivarLuego());
     }
 
-    // NUEVA CORRUTINA
-    private IEnumerator DesactivarDespuesDeCaer()
+    private IEnumerator DesactivarLuego()
     {
-        // Espera el tiempo que indicaste (1.5 segundos)
         yield return new WaitForSeconds(tiempoParaDesactivar);
 
-        // Desactiva el objeto en lugar de destruirlo
+        // Aquí puedes cambiar a SetActive(false), o resetear posición si quieres que reaparezca, etc.
         gameObject.SetActive(false);
+    }
+
+    // -------- Implementación de IDestructible --------
+
+    void IDestructible.TriggerDestruction()
+    {
+        HacerCaer();
+    }
+
+    void IDestructible.TriggerDestruction(Vector3 origin)
+    {
+        HacerCaer();
+
+        // Opcional: pequeño empujón extra
+        Vector3 dir = (transform.position - origin).normalized;
+        if (rb != null && dir != Vector3.zero)
+        {
+            rb.AddForce(dir * 2f, ForceMode.Impulse);
+        }
     }
 }

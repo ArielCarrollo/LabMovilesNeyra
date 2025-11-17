@@ -6,7 +6,9 @@ using System.Collections;
 public enum PlayerState
 {
     Normal,
-    Knockback
+    Knockback,
+    Charging
+
 }
 
 [RequireComponent(typeof(Rigidbody))]
@@ -20,6 +22,12 @@ public abstract class CharacterBase : NetworkBehaviour
     [SerializeField] protected int fuerzaBase = 10;
     [SerializeField] protected int nivelBase = 1;
     [SerializeField] protected float estaminaMaxima = 100f;
+
+    [Header("Lógica de Estamina")]
+    [SerializeField, Tooltip("Cuánta estamina se recarga por segundo")]
+    private float staminaChargeRate = 20f;
+
+    private Coroutine chargingCoroutine;
 
     [Header("Lógica de Movimiento")]
     [SerializeField, Tooltip("Qué tan rápido gira el personaje (más alto es más rápido)")]
@@ -64,6 +72,7 @@ public abstract class CharacterBase : NetworkBehaviour
     public NetworkVariable<int> Fuerza = new NetworkVariable<int>();
     public NetworkVariable<int> Nivel = new NetworkVariable<int>();
     public NetworkVariable<float> Estamina = new NetworkVariable<float>();
+    public float EstaminaMaxima { get { return estaminaMaxima; } }
 
     private float serverMoveInput;
     private bool serverIsGrounded;
@@ -87,7 +96,19 @@ public abstract class CharacterBase : NetworkBehaviour
             Nivel.Value = nivelBase;
             Estamina.Value = estaminaMaxima;
         }
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.RegisterPlayer(this);
+        }
     }
+    public override void OnNetworkDespawn()
+    {
+        if (UIManager.Instance != null)
+        {
+            UIManager.Instance.UnregisterPlayer(this);
+        }
+    }
+
     // --- MANEJO DE INPUT
     public virtual void OnMove(InputAction.CallbackContext context)
     {
@@ -123,6 +144,21 @@ public abstract class CharacterBase : NetworkBehaviour
         if (context.performed)
         {
             UltimateAttackServerRpc();
+        }
+    }
+    public virtual void OnCharge(InputAction.CallbackContext context)
+    {
+        if (!IsOwner || CurrentState.Value == PlayerState.Knockback) return;
+
+        // Si presionó el botón
+        if (context.performed)
+        {
+            ChargeStaminaServerRpc(true);
+        }
+        // Si soltó el botón
+        else if (context.canceled)
+        {
+            ChargeStaminaServerRpc(false);
         }
     }
 
@@ -162,6 +198,44 @@ public abstract class CharacterBase : NetworkBehaviour
     {
         Debug.Log("SERVIDOR: Ulti base (no hace nada)");
     }
+    [Rpc(SendTo.Server)]
+    protected virtual void ChargeStaminaServerRpc(bool startCharging)
+    {
+        if (startCharging && CurrentState.Value == PlayerState.Normal)
+        {
+            CurrentState.Value = PlayerState.Charging;
+
+            chargingCoroutine = StartCoroutine(ChargeStaminaCoroutine());
+        }
+        else if (!startCharging || CurrentState.Value != PlayerState.Charging)
+        {
+            CurrentState.Value = PlayerState.Normal;
+
+            if (chargingCoroutine != null)
+            {
+                StopCoroutine(chargingCoroutine);
+                chargingCoroutine = null;
+            }
+        }
+    }
+
+    private IEnumerator ChargeStaminaCoroutine()
+    {
+        Debug.Log("Servidor: Empezando a cargar Estamina...");
+        while (Estamina.Value < estaminaMaxima)
+        {
+            Estamina.Value += staminaChargeRate * Time.deltaTime;
+
+            Estamina.Value = Mathf.Clamp(Estamina.Value, 0, estaminaMaxima);
+
+            yield return null;
+        }
+
+        Debug.Log("Servidor: Estamina llena.");
+        CurrentState.Value = PlayerState.Normal;
+        chargingCoroutine = null;
+    }
+
     protected virtual void Update()
     {
         if (!IsOwner) return;

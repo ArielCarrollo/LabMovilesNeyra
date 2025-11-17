@@ -72,7 +72,7 @@ public class SimplePlayerController : NetworkBehaviour
 
         if (UIManager.Instance != null)
         {
-            UIManager.Instance.RegisterPlayer(CurrentHealth, maxHealth);
+          //  UIManager.Instance.RegisterPlayer(CurrentHealth, maxHealth);
         }
         else
         {

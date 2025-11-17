@@ -1,24 +1,17 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using System.Threading.Tasks; // Importante para async
-using Unity.Services.Core; // Para ServicesInitializationState
+using System.Threading.Tasks;
+using Unity.Services.Core;
 
-/// <summary>
-/// Este script solo existe en la escena Bootstrap.
-/// Su función es inicializar Unity Services y LUEGO
-/// cargar la escena de Login.
-/// </summary>
 public class BootstrapManager : MonoBehaviour
 {
     [Tooltip("El nombre de la escena a la que quieres ir después del arranque.")]
-    [SerializeField] private string sceneToLoad = "Login";
+    [SerializeField] private string sceneToLoad = "IntroLogo"; // o "Login", como lo tengas
 
-    // Convertimos Start() en un método asíncrono
     async void Start()
     {
         try
         {
-            // Evitar doble inicialización si ya se hizo
             if (UnityServices.State == ServicesInitializationState.Uninitialized)
             {
                 CloudAuthManager authManager = FindObjectOfType<CloudAuthManager>();
@@ -28,14 +21,22 @@ public class BootstrapManager : MonoBehaviour
                     return;
                 }
 
-                // 2. Esperamos a que termine la inicialización de servicios
                 Debug.Log("Bootstrap: Inicializando Unity Services...");
                 await authManager.InitializeUnityServices();
                 Debug.Log("Bootstrap: Unity Services inicializados.");
             }
 
-            Debug.Log("Bootstrap: Cargando escena 'Login'...");
-            SceneManager.LoadScene(sceneToLoad, LoadSceneMode.Single);
+            Debug.Log($"Bootstrap: Cargando escena '{sceneToLoad}'...");
+
+            if (SceneTransitionManager.Instance != null)
+            {
+                // Ahora sí, usamos el fade genérico
+                SceneTransitionManager.Instance.LoadSceneWithFade(sceneToLoad);
+            }
+            else
+            {
+                SceneManager.LoadScene(sceneToLoad, LoadSceneMode.Single);
+            }
         }
         catch (System.Exception e)
         {

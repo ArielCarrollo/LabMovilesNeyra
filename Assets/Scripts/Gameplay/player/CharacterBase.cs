@@ -39,6 +39,10 @@ public abstract class CharacterBase : NetworkBehaviour
     [SerializeField] private LayerMask groundMask;
     [SerializeField] private float groundDistance = 0.3f;
 
+    [Header("Configuración de Minijuego")]
+    [SerializeField, Tooltip("El GameObject de la corona (hijo de este prefab)")]
+    private GameObject crownVisual;
+
     [Header("Componentes")]
     protected Rigidbody rb;
     protected Animator animator;
@@ -67,6 +71,7 @@ public abstract class CharacterBase : NetworkBehaviour
     [SerializeField, Tooltip("La fuerza vertical (hacia arriba) fija del golpe")]
     private float verticalKnockup = 7f;
 
+    public NetworkVariable<bool> IsKing = new NetworkVariable<bool>(false);
     public NetworkVariable<PlayerState> CurrentState = new NetworkVariable<PlayerState>(PlayerState.Normal);
     public NetworkVariable<int> Vida = new NetworkVariable<int>();
     public NetworkVariable<int> Fuerza = new NetworkVariable<int>();
@@ -85,9 +90,11 @@ public abstract class CharacterBase : NetworkBehaviour
         rb = GetComponent<Rigidbody>();
         animator = GetComponent<Animator>();
     }
-
+    
     public override void OnNetworkSpawn()
     {
+        base.OnNetworkSpawn();
+
         transform.rotation = Quaternion.Euler(0, 90, 0);
         if (IsServer)
         {
@@ -100,15 +107,40 @@ public abstract class CharacterBase : NetworkBehaviour
         {
             UIManager.Instance.RegisterPlayer(this);
         }
+        if (MinigameManager.Instance != null)
+        {
+            MinigameManager.Instance.RegisterPlayer(this);
+        }
+        else
+        {
+            // ¡Añade este Debug! Si ves esto, el problema es la "Race Condition"
+            Debug.LogError("¡ERROR! MinigameManager.Instance era NULL al spawnear.");
+        }
+        IsKing.OnValueChanged += OnKingStatusChanged;
+        OnKingStatusChanged(false, IsKing.Value);
     }
     public override void OnNetworkDespawn()
     {
+        base.OnNetworkDespawn();
+
         if (UIManager.Instance != null)
         {
             UIManager.Instance.UnregisterPlayer(this);
         }
+        if (MinigameManager.Instance != null)
+        {
+            MinigameManager.Instance.UnregisterPlayer(this);
+        }
+        IsKing.OnValueChanged -= OnKingStatusChanged;
     }
-
+    private void OnKingStatusChanged(bool previousValue, bool newValue)
+    {
+        if (crownVisual != null)
+        {
+            // Simplemente activa o desactiva el objeto visual de la corona.
+            crownVisual.SetActive(newValue);
+        }
+    }
     // --- MANEJO DE INPUT
     public virtual void OnMove(InputAction.CallbackContext context)
     {
@@ -274,32 +306,38 @@ public abstract class CharacterBase : NetworkBehaviour
 
       
     }
-
     public void HitCheck()
     {
         if (!IsServer) return;
-        Debug.Log("SERVIDOR: ¡HitCheck! Buscando golpes en " + hitPoint.position);
 
         Collider[] hits = Physics.OverlapSphere(hitPoint.position, hitRadius, hitableLayers);
 
         foreach (Collider hit in hits)
         {
-            if (hit.transform == this.transform) continue; 
+            if (hit.transform == this.transform) continue;
 
+            // --- ¡AQUÍ ESTÁ LA CORRECCIÓN! ---
 
-            Vector3 direction = (hit.transform.position - transform.position).normalized + (Vector3.up * 0.3f);
-
+            // Opción 1: ¿Es un jugador?
             if (hit.TryGetComponent<CharacterBase>(out CharacterBase victimPlayer))
             {
-                // 1. Calcular la dirección HORIZONTAL
-                Vector3 horizontalDir = (hit.transform.position - transform.position);
+                // 1. Calcular la dirección SÓLO HORIZONTAL
+                Vector3 horizontalDir = (victimPlayer.transform.position - transform.position);
                 horizontalDir.y = 0; // Ignorar diferencia de altura
-                horizontalDir.z = 0; // Estar seguros de que es 2D
+                horizontalDir.z = 0; // Asegurar que es 2D
                 horizontalDir.Normalize(); // Dirección pura (izquierda o derecha)
 
-                Debug.Log("SERVIDOR: ¡Golpe conectado con JUGADOR " + hit.name + "!");
+                ulong attackerId = this.OwnerClientId;
+                ulong victimId = victimPlayer.OwnerClientId;
 
-                // 2. Llamar a ApplyKnockback SÓLO con la fuerza horizontal
+                bool victimIsKing = (MinigameManager.Instance.CurrentKingId.Value == victimId);
+
+                if (victimIsKing && attackerId != victimId)
+                {
+                    MinigameManager.Instance.TransferCrown(this);
+                }
+
+                // 2. Pasar SÓLO el vector horizontal al knockback
                 victimPlayer.ApplyKnockback(horizontalDir, punchForce);
             }
             // Opción 2: ¿Es un objeto (barril, etc.)?
@@ -307,7 +345,6 @@ public abstract class CharacterBase : NetworkBehaviour
             {
                 // A los objetos sí les damos la dirección original (con el 'up')
                 Vector3 objectDirection = (hit.transform.position - transform.position).normalized + (Vector3.up * 0.3f);
-                Debug.Log("SERVIDOR: ¡Golpe conectado con OBJETO " + hit.name + "!");
                 objectRb.AddForce(objectDirection * punchForce, ForceMode.Impulse);
             }
         }
@@ -329,7 +366,6 @@ public abstract class CharacterBase : NetworkBehaviour
 
         rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0, rb.linearVelocity.z);
 
-        // 2. Aplica las dos fuerzas POR SEPARADO
         rb.AddForce(horizontalDirection * horizontalForce, ForceMode.Impulse); // Fuerza Horizontal (costado)
         rb.AddForce(Vector3.up * verticalKnockup, ForceMode.Impulse);          // Fuerza Vertical (arriba)
 
@@ -340,8 +376,6 @@ public abstract class CharacterBase : NetworkBehaviour
     {
         yield return new WaitForSeconds(knockbackDuration);
 
-        // Resetea la velocidad por si acaso (opcional)
-        // rb.velocity = Vector3.zero; 
         CurrentState.Value = PlayerState.Normal;
     }
 }

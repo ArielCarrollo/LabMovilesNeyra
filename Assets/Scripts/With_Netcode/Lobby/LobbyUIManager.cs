@@ -446,7 +446,19 @@ public class LobbyUIManager : MonoBehaviour
         {
             readyButtonText.text = "Listo";
         }
-
+        var relay = FindObjectOfType<RelayLobbyConnector>();
+        if (relay != null && lobbyCodeText != null)
+        {
+            if (relay.CurrentLobby != null)
+            {
+                lobbyCodeText.text = $"Código Lobby: {relay.CurrentLobby.LobbyCode}";
+            }
+            else
+            {
+                // Esto se mostrará en modo Offline
+                lobbyCodeText.text = "Modo Local";
+            }
+        }
         startGameButton.gameObject.SetActive(NetworkManager.Singleton.IsHost);
         startGameButton.interactable = allPlayersReady;
     }

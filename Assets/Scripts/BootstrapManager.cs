@@ -12,12 +12,19 @@ public class BootstrapManager : MonoBehaviour
     {
         try
         {
+            // MODIFICACIÓN: Bloque Xbox Offline
+#if UNITY_WSA_10_0
+            Debug.Log("Bootstrap (Xbox): Saltando inicialización de Unity Services (Modo Offline).");
+            // No inicializamos AuthManager ni UnityServices aquí.
+            // Pasamos directo a cargar la escena.
+#else
+            // Lógica original para otras plataformas
             if (UnityServices.State == ServicesInitializationState.Uninitialized)
             {
                 CloudAuthManager authManager = FindObjectOfType<CloudAuthManager>();
                 if (authManager == null)
                 {
-                    Debug.LogError("¡BootstrapManager no pudo encontrar CloudAuthManager en la escena 'Bootstrap'!");
+                    Debug.LogError("¡BootstrapManager no pudo encontrar CloudAuthManager!");
                     return;
                 }
 
@@ -25,12 +32,12 @@ public class BootstrapManager : MonoBehaviour
                 await authManager.InitializeUnityServices();
                 Debug.Log("Bootstrap: Unity Services inicializados.");
             }
+#endif
 
             Debug.Log($"Bootstrap: Cargando escena '{sceneToLoad}'...");
 
             if (SceneTransitionManager.Instance != null)
             {
-                // Ahora sí, usamos el fade genérico
                 SceneTransitionManager.Instance.LoadSceneWithFade(sceneToLoad);
             }
             else

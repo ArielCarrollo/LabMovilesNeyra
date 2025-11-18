@@ -70,11 +70,24 @@ public class UiGameManager : MonoBehaviour
             registerPanel.SetActive(false);
         });
 
+#if UNITY_WSA_10_0
+        // LÓGICA DE AUTO-LOGIN PARA XBOX
+        Debug.Log("UiGameManager: Auto-Login para Xbox...");
+        loginPanel.SetActive(false);
+        registerPanel.SetActive(false);
+
+        // Usamos un nombre por defecto o recuperado
+        string xboxUser = "XboxUser";
+        // Llamamos al Auth Manager (que ahora tiene lógica mockeada)
+        _ = CloudAuthManager.Instance.SignInWithUsernamePassword(xboxUser, "ignored");
+#else
+        // Lógica normal para PC/Web
         loginPanel.SetActive(true);
         registerPanel.SetActive(false);
         errorText.gameObject.SetActive(false);
         if (lobbySelectionPanel) lobbySelectionPanel.SetActive(false);
         if (lobbiesPanel) lobbiesPanel.SetActive(false);
+#endif
     }
 
     private async void OnLoginClicked()

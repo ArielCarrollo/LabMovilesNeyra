@@ -12,7 +12,12 @@ using UnityEngine;
 public class CloudAuthManager : MonoBehaviour
 {
     public static CloudAuthManager Instance { get; private set; }
-
+    private bool IsXboxOffline =>
+#if UNITY_WSA_10_0
+        true;
+#else
+        false;
+#endif
     public event Action OnSignInSuccess;
     public event Action<string> OnSignInFailed;
     public event Action<string> OnPlayerNameUpdated;
@@ -37,6 +42,7 @@ public class CloudAuthManager : MonoBehaviour
 
     public async Task InitializeUnityServices()
     {
+        if (IsXboxOffline) return; // No hacer nada en Xbox
         if (UnityServices.State == ServicesInitializationState.Initialized) return;
 
         try
@@ -55,6 +61,13 @@ public class CloudAuthManager : MonoBehaviour
 
     public async Task SignUpWithUsernamePassword(string username, string password)
     {
+#if UNITY_WSA_10_0
+        // Bypass completo para Xbox
+        MockLoginInfo(username);
+        await SavePlayerProgress(); // Guarda localmente
+        OnSignInSuccess?.Invoke();
+        return;
+#endif
         SignOutIfSignedIn();
         await InitializeUnityServices();
         try
@@ -85,6 +98,12 @@ public class CloudAuthManager : MonoBehaviour
     }
     public async Task UpdatePlayerNameAsync(string newName)
     {
+#if UNITY_WSA_10_0
+        playerName = newName;
+        OnPlayerNameUpdated?.Invoke(newName);
+        await Task.CompletedTask;
+        return;
+#endif
         if (string.IsNullOrWhiteSpace(newName))
         {
             Debug.LogError("El nombre no puede estar vacío.");
@@ -109,6 +128,15 @@ public class CloudAuthManager : MonoBehaviour
     }
     public async Task SignInWithUsernamePassword(string username, string password)
     {
+
+#if UNITY_WSA_10_0
+        // Bypass completo para Xbox
+        // En Xbox podrías incluso ignorar username/password y usar "PlayerXbox"
+        MockLoginInfo(string.IsNullOrEmpty(username) ? "XboxPlayer" : username);
+        await LoadPlayerProgress(); // Carga localmente
+        OnSignInSuccess?.Invoke();
+        return;
+#endif
         SignOutIfSignedIn();
         await InitializeUnityServices();
         try
@@ -160,6 +188,22 @@ public class CloudAuthManager : MonoBehaviour
     }
     public async Task LoadPlayerProgress()
     {
+#if UNITY_WSA_10_0
+        // CARGA LOCAL (PlayerPrefs o File)
+        Debug.Log("[Xbox Offline] Cargando datos locales...");
+        string json = PlayerPrefs.GetString(PLAYER_PROGRESS_KEY, "");
+
+        if (!string.IsNullOrEmpty(json))
+        {
+            LocalPlayerData = JsonConvert.DeserializeObject<PlayerData>(json);
+        }
+        else
+        {
+            LocalPlayerData = new PlayerData(0, playerName);
+        }
+        await Task.CompletedTask;
+        return;
+#endif
         try
         {
             var serverData = await CloudSaveService.Instance.Data.Player
@@ -205,6 +249,15 @@ public class CloudAuthManager : MonoBehaviour
 
     public async Task SavePlayerProgress()
     {
+#if UNITY_WSA_10_0
+        // GUARDADO LOCAL
+        string json = JsonConvert.SerializeObject(LocalPlayerData);
+        PlayerPrefs.SetString(PLAYER_PROGRESS_KEY, json);
+        PlayerPrefs.Save();
+        Debug.Log("[Xbox Offline] Progreso guardado en PlayerPrefs.");
+        await Task.CompletedTask;
+        return;
+#endif
         try
         {
             string jsonData = JsonConvert.SerializeObject(LocalPlayerData);
@@ -226,6 +279,13 @@ public class CloudAuthManager : MonoBehaviour
             playerName = null;
             Debug.Log("Auth: sesión anterior cerrada.");
         }
+    }
+    private void MockLoginInfo(string name)
+    {
+        playerId = "LocalXboxID_" + Guid.NewGuid().ToString().Substring(0, 5);
+        playerName = name;
+        LocalPlayerData = new PlayerData(0, name);
+        Debug.Log($"[Xbox Offline] Login simulado para: {playerName}");
     }
 
     public void UpdateLocalData(PlayerData data)

@@ -66,15 +66,46 @@ public class RelayLobbyConnector : MonoBehaviour
         NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
         NetworkManager.Singleton.OnClientDisconnectCallback += HandleClientDisconnected;
 
+#if UNITY_WSA_10_0
+        // En Xbox, saltamos directo a la lógica de creación local o UI específica
+        Debug.Log("[RelayLobbyConnector] Modo Xbox detectado.");
+        // Opcional: Podrías llamar a StartXboxOfflineGame() directamente aquí 
+        // si quieres que el juego inicie apenas carga la escena de menú.
+#else
         ShowJoiningPanel();
 
         if (UnityServices.State == ServicesInitializationState.Uninitialized)
         {
             Debug.LogWarning("Unity Services aún no inicializados (ok, te logueas en esta escena). Continuamos y esperaremos al login.");
         }
+#endif
     }
 
+    public void StartXboxOfflineGame()
+    {
+#if UNITY_WSA_10_0
+        Debug.Log("[Xbox] Iniciando Host Local (Offline)...");
+        SetStatus("Iniciando juego local...");
 
+        // 1. Limpiar configuración de Relay del transporte (importante)
+        var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+        transport.SetConnectionData("127.0.0.1", 7777); // IP Loopback
+        // transport.SetRelayServerData(...) -> Asegúrate de NO tener datos de relay sucios
+
+        // 2. Instanciar GameManager si no existe (para manejar spawns)
+        if (GameManager.Instance == null && gameManagerPrefab != null)
+        {
+            var gm = Instantiate(gameManagerPrefab);
+            var no = gm.GetComponent<NetworkObject>();
+            no.Spawn();
+        }
+
+        // 3. Iniciar Host (Cliente + Servidor local)
+        NetworkManager.Singleton.StartHost();
+
+        // Vivox se ignora en los managers respectivos.
+#endif
+    }
     private void OnDestroy()
     {
         if (NetworkManager.Singleton != null)
@@ -189,7 +220,15 @@ public class RelayLobbyConnector : MonoBehaviour
 
 
     // --- Lógica de Unión a Lobby (Refactorizada) ---
-
+    public void OnCreateOfflineLobbyClicked()
+    {
+#if UNITY_WSA_10_0
+        StartXboxOfflineHost();
+#else
+        // Si no es Xbox, redirigimos a la función online (aunque el botón debería estar oculto).
+        Debug.LogWarning("Intentando crear lobby offline fuera de modo UNITY_WSA_10_0.");
+#endif
+    }
     public async void OnJoinByCodeClicked()
     {
         string code = joinCodeInput.text;
@@ -547,6 +586,11 @@ private void StartHeartbeat()
         _currentLobby = null;
         StopHeartbeat();
         StopLobbyRefresh();
+
+        // CORRECCIÓN: Asegurar que el transporte vuelva a un estado limpio
+        var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+        transport.SetClientRelayData(default, default, default, default, default, default);
+        transport.SetHostRelayData(default, default, default, default, default);
     }
 
     private static string GetConnType()
@@ -556,5 +600,48 @@ private void StartHeartbeat()
 #else
         return "dtls";
 #endif
+    }
+    private async void StartXboxOfflineHost()
+    {
+        SetStatus("Iniciando juego local (Offline)...");
+        try
+        {
+            // 1. Limpiar/Configurar el transporte a modo Localhost.
+            // Esto es crucial para asegurar que no intente usar Relay.
+            var transport = NetworkManager.Singleton.GetComponent<UnityTransport>();
+            transport.SetConnectionData("127.0.0.1", 7777); // Default Localhost
+
+            // 2. Iniciar el Host (Servidor + Cliente local)
+            NetworkManager.Singleton.StartHost();
+
+            // 3. Spawneamos el GameManager (si no existe)
+            if (gameManagerPrefab != null)
+            {
+                var gm = Instantiate(gameManagerPrefab);
+                var no = gm.GetComponent<NetworkObject>();
+                no.Spawn();
+            }
+            else
+            {
+                Debug.LogError("gameManagerPrefab no está asignado.");
+                SetStatus("Error: Prefab de GameManager no encontrado.");
+                return;
+            }
+
+            // 4. Establecer estado (sin código de lobby)
+            _currentLobby = null; // No hay Lobby en la nube
+            StopHeartbeat(); // No necesitamos Heartbeat
+
+            SetStatus("Lobby Local creado exitosamente.");
+            if (joinCodeLabel) joinCodeLabel.text = "Modo Local";
+
+            // 5. Vivox: Desactivado automáticamente por la lógica en VivoxLobbyChatManager.cs
+
+        }
+        catch (Exception e)
+        {
+            SetStatus("Error al crear el lobby local.");
+            Debug.LogError(e);
+        }
     }
 }

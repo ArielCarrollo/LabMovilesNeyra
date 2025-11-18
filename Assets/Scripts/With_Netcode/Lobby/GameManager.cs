@@ -10,7 +10,7 @@ using System.Linq;
 public class GameManager : NetworkBehaviour
 {
     public static GameManager Instance { get; private set; }
-
+    public bool IsOfflineMode { get; private set; } = false;
     [Header("Prefabs & Scenes")]
     [SerializeField] private Transform playerPrefab;
     private const string GameSceneName = "Game";
@@ -34,6 +34,12 @@ public class GameManager : NetworkBehaviour
         {
             Instance = this;
             DontDestroyOnLoad(gameObject);
+
+            // DETECTAR XBOX / UWP
+#if UNITY_WSA_10_0
+            IsOfflineMode = true;
+            Debug.Log("GameManager: Detectado modo UNITY_WSA_10_0. Activando modo Offline.");
+#endif
         }
         else
         {

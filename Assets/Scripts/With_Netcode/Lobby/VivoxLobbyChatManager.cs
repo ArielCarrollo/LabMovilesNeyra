@@ -70,6 +70,9 @@ public class VivoxLobbyChatManager : MonoBehaviour
     /// <summary>Login a Vivox si hace falta (después de autenticarte en UGS).</summary>
     public async Task LoginIfNeeded(string displayName, bool isHostFlag)
     {
+#if UNITY_WSA_10_0
+        return; // Vivox desactivado en local
+#endif
         iAmHost = isHostFlag;
 
         if (!AuthenticationService.Instance.IsSignedIn)
@@ -115,6 +118,9 @@ public class VivoxLobbyChatManager : MonoBehaviour
     /// <summary>Únete al canal del lobby con voz + texto y prepara el audio tap.</summary>
     public async Task JoinLobbyChannel(string lobbyCodeOrId)
     {
+#if UNITY_WSA_10_0
+        return;
+#endif
         if (!isLoggedIn)
         {
             Debug.LogWarning("VivoxChat: intenta unirse a canal sin login.");

@@ -2,6 +2,7 @@ using UnityEngine;
 using Unity.Netcode;
 using TMPro;
 using UnityEngine.UI;
+using System.Reflection;
 
 public class UiGameManager : MonoBehaviour
 {
@@ -25,6 +26,10 @@ public class UiGameManager : MonoBehaviour
     [SerializeField] private TMP_InputField registerPassword;
     [SerializeField] private Button registerButton;
     [SerializeField] private Button goToLoginButton;
+    [Header("Login alternativo")]
+    [SerializeField] private Button unityAccountLoginButton;
+    [SerializeField] private Button googleLoginButton;
+    [SerializeField] private Button continueAnonymousButton;
 
     [Header("Managers")]
     [SerializeField] private LobbyUIManager lobbyUIManager;
@@ -69,6 +74,14 @@ public class UiGameManager : MonoBehaviour
             loginPanel.SetActive(true);
             registerPanel.SetActive(false);
         });
+        if (unityAccountLoginButton != null)
+            unityAccountLoginButton.onClick.AddListener(OnUnityAccountLoginClicked);
+
+        if (googleLoginButton != null)
+            googleLoginButton.onClick.AddListener(OnGoogleLoginClicked);
+
+        if (continueAnonymousButton != null)
+            continueAnonymousButton.onClick.AddListener(OnContinueAnonymousClicked);
 
         loginPanel.SetActive(true);
         registerPanel.SetActive(false);
@@ -130,6 +143,13 @@ public class UiGameManager : MonoBehaviour
         registerButton.interactable = isInteractable;
         goToLoginButton.interactable = isInteractable;
         goToRegisterButton.interactable = isInteractable;
+
+        if (unityAccountLoginButton != null)
+            unityAccountLoginButton.interactable = isInteractable;
+        if (googleLoginButton != null)
+            googleLoginButton.interactable = isInteractable;
+        if (continueAnonymousButton != null)
+            continueAnonymousButton.interactable = isInteractable;
     }
 
     public void GoToLobby()
@@ -151,5 +171,52 @@ public class UiGameManager : MonoBehaviour
         errorText.gameObject.SetActive(false);
         loginRootPanel.SetActive(false);
     }
+    // ===================== LOGIN ALTERNATIVO =====================
+
+    private async void OnUnityAccountLoginClicked()
+    {
+        if (CloudAuthManager.Instance == null)
+        {
+            ShowError("No se encontró CloudAuthManager en la escena.");
+            return;
+        }
+
+        SetUIInteractable(false);
+        await CloudAuthManager.Instance.SignInWithUnityPlayerAccount(false);
+        // Cuando el login termine bien, CloudAuthManager disparará OnSignInSuccess
+        // y se llamará a HandleSignInSuccess() -> pasa al lobby.
+    }
+
+    private async void OnGoogleLoginClicked()
+    {
+        if (CloudAuthManager.Instance == null)
+        {
+            ShowError("No se encontró CloudAuthManager en la escena.");
+            return;
+        }
+
+        SetUIInteractable(false);
+
+        // Aquí usamos el MISMO flujo de Unity Player Accounts.
+        // Dentro de la web el jugador puede elegir "Continuar con Google"
+        // si lo tienes configurado como proveedor social.
+        await CloudAuthManager.Instance.SignInWithUnityPlayerAccount(false);
+    }
+
+    private async void OnContinueAnonymousClicked()
+    {
+        if (CloudAuthManager.Instance == null)
+        {
+            ShowError("No se encontró CloudAuthManager en la escena.");
+            return;
+        }
+
+        SetUIInteractable(false);
+
+        // Esto hace el SignInAnonymouslyAsync si hace falta
+        await CloudAuthManager.Instance.SignInAnonymouslyIfNeeded();
+
+    }
+
 
 }

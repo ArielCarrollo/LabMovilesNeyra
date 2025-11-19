@@ -60,7 +60,7 @@ public class UnityPlayerAuth : MonoBehaviour
             Debug.Log(ex);
         }
     }
-    private async Task SignInWithUnityAuth()
+    public async Task SignInWithUnityAuth()
     {
         try
         {
